@@ -259,6 +259,22 @@ func main() {
 				}
 			}
 		}()
-	}, func() {})
+	}, func() {
+		// Runs when the tray window closes: after quit() on a regular exit,
+		// or on WM_ENDSESSION when Windows shuts down, restarts or signs out.
+		// In the latter case Windows ends the process as soon as this
+		// returns, and a kill switch in Windows Firewall would outlive it and
+		// leave the PC offline after the restart, so it is lifted first.
+		if a.KillSwitch().Active() {
+			if err := a.KillSwitch().Disable(); err != nil {
+				a.Log.Errorf("app", i18n.T("main.sessionEndKillSwitchFailed"), err)
+			} else {
+				a.Log.Infof("app", "%s", i18n.T("main.sessionEndKillSwitchRemoved"))
+			}
+		}
+		// The rest of the shutdown, if Windows gives it the time (or if the
+		// shutdown was cancelled: the tray icon is gone by now anyway).
+		go quit()
+	})
 	quit()
 }
