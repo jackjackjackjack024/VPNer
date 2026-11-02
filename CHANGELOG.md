@@ -4,6 +4,12 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-02
+
+### Fixed
+
+- The network no longer stays blocked after Windows restarts with routing and the kill switch on. Before, VPNer was ended during shutdown before it could lift the kill switch, which lives in Windows Firewall and survives a reboot, so the PC had no network at all until VPNer was started again. Now VPNer lifts it when Windows shuts down, restarts or signs out. If that does not happen (power loss, a crash), a scheduled task restores the original firewall policy at the next startup or logon and removes itself. With autostart and routing on launch both on, the kill switch is kept until VPNer starts, as before.
+
 ## [0.1.2] - 2026-10-25
 
 ### Fixed
