@@ -61,6 +61,7 @@
  "app.couldNotOpenBrowserOpen": "не удалось открыть браузер: %v — откройте ссылку вручную",
  "app.couldNotRemoveVpnerUser": "не удалось удалить пользователя VPNer с сервера Amnezia: %v",
  "app.couldNotSavePassword": "не удалось сохранить пароль: %v",
+ "app.couldNotSetUpBootRestore": "не удалось настроить восстановление сети при запуске Windows (если Windows перезагрузится с включённой маршрутизацией, запустите VPNer или нажмите «Аварийно восстановить сеть» в трее): %s",
  "app.creatingUserOnAmneziaServer": "Создаю пользователя «%s» на сервере Amnezia",
  "app.creatingVirtualMachine": "Создание виртуальной машины «%s»",
  "app.creatingVirtualMachineMbCpu": "создаю виртуальную машину %s (%d МБ, %d CPU, диск %d ГБ, внешняя сеть: %s)",

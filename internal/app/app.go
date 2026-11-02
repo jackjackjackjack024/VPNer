@@ -618,7 +618,18 @@ func (a *App) enableKillSwitch() error {
 	a.mu.Lock()
 	bin := a.engine.Bin
 	a.mu.Unlock()
-	if err := a.ks.Enable([]string{exe, bin}, a.Config().Settings.AllowLAN); err != nil {
+	s := a.Config().Settings
+	// With autostart and routing on launch VPNer takes over again at logon,
+	// and a kill switch kept through the restart guards against leaks until
+	// then. Otherwise a kill switch left behind would keep the PC offline.
+	restoreAtBoot := !(s.Autostart && s.StartOnLaunch)
+	err := a.ks.Enable([]string{exe, bin}, s.AllowLAN, restoreAtBoot)
+	var br *firewall.BootRestoreError
+	if errors.As(err, &br) {
+		a.Log.Warnf("app", i18n.T("app.couldNotSetUpBootRestore"), br.Msg)
+		err = nil
+	}
+	if err != nil {
 		return err
 	}
 	a.Log.Infof("app", "%s", i18n.T("app.systemKillSwitchOnOn"))
