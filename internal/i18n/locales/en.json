@@ -61,6 +61,7 @@
  "app.couldNotOpenBrowserOpen": "could not open the browser: %v — open the link by hand",
  "app.couldNotRemoveVpnerUser": "could not remove the VPNer user from the Amnezia server: %v",
  "app.couldNotSavePassword": "could not save the password: %v",
+ "app.couldNotSetUpBootRestore": "could not set up restoring the network at Windows startup (if Windows restarts with routing on, run VPNer or use “Restore the network (emergency)” in the tray): %s",
  "app.creatingUserOnAmneziaServer": "Creating user “%s” on the Amnezia server",
  "app.creatingVirtualMachine": "Creating virtual machine “%s”",
  "app.creatingVirtualMachineMbCpu": "creating virtual machine %s (%d MB, %d CPU, %d GB disk, external network: %s)",
