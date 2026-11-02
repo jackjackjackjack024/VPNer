@@ -250,6 +250,8 @@
  "main.quit2": "Выход",
  "main.removeVpnerFromThisComputer": "Удалить VPNer с этого компьютера?\n\nВсе VPN-подключения будут отключены, сеть вернётся в обычный режим.",
  "main.restoreNetworkEmergency": "Аварийно восстановить сеть",
+ "main.sessionEndKillSwitchFailed": "Windows завершает сеанс, но снять kill-switch не удалось: %v",
+ "main.sessionEndKillSwitchRemoved": "Windows завершает сеанс — kill-switch снят, чтобы после перезагрузки работала сеть",
  "main.startingRouting": "запуск маршрутизации: %v",
  "main.turnEverythingOffAndRemove": "Выключить всё и снять kill-switch",
  "main.turnRoutingOff": "Выключить маршрутизацию",

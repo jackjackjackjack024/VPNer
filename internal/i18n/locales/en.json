@@ -250,6 +250,8 @@
  "main.quit2": "Quit",
  "main.removeVpnerFromThisComputer": "Remove VPNer from this computer?\n\nAll VPN connections will be disconnected and the network returns to normal.",
  "main.restoreNetworkEmergency": "Restore the network (emergency)",
+ "main.sessionEndKillSwitchFailed": "Windows is ending the session, but the kill switch could not be removed: %v",
+ "main.sessionEndKillSwitchRemoved": "Windows is ending the session — kill switch removed so the network works after the restart",
  "main.startingRouting": "starting routing: %v",
  "main.turnEverythingOffAndRemove": "Turn everything off and remove the kill switch",
  "main.turnRoutingOff": "Turn routing off",
