@@ -115,8 +115,8 @@ func Generate(in GenInput) (map[string]any, error) {
 	var serverHosts []string
 	for i := range cfg.Connections {
 		c := &cfg.Connections[i]
-		if !c.Enabled {
-			continue
+		if !c.Enabled || c.Type == config.TypeChain {
+			continue // chains are built from their hops below
 		}
 		p, err := providers.Get(c.Type)
 		if err != nil {
@@ -135,24 +135,44 @@ func Generate(in GenInput) (map[string]any, error) {
 			if !hasEP {
 				continue // not running: rules targeting it are rejected below
 			}
-			server := ep.Server
-			if server == "" {
-				server = "127.0.0.1"
-			}
-			out = map[string]any{"type": "socks5", "server": server, "port": ep.Port,
-				"username": ep.User, "password": ep.Pass, "udp": true}
-			if ep.Iface != "" {
-				out["interface-name"] = ep.Iface
-			} else if in.LoopbackIface != "" {
-				// mihomo binds outbound UDP sockets to the physical interface in
-				// TUN mode, which breaks UDP to loopback; pin it to loopback.
-				out["interface-name"] = in.LoopbackIface
-			}
+			out = socksOutbound(ep, in.LoopbackIface)
 		}
 		out["name"] = c.ID
 		proxies = append(proxies, out)
 		known[c.ID] = true
 		serverHosts = append(serverHosts, providers.ServerHosts(c)...)
+	}
+
+	// Chains come after the connections: they build on them. A chain that
+	// cannot run in full is left out, so its rules are rejected.
+	for _, ch := range Chains(cfg) {
+		if !known[ch.First] {
+			continue
+		}
+		var add []map[string]any
+		for _, st := range ch.Steps {
+			var out map[string]any
+			if st.Tunnel {
+				ep, ok := in.Endpoints[st.Name]
+				if !ok {
+					add = nil
+					break
+				}
+				out = socksOutbound(ep, in.LoopbackIface)
+			} else {
+				out = copyMap(st.Out)
+				out["dialer-proxy"] = st.Prev
+			}
+			out["name"] = st.Name
+			add = append(add, out)
+		}
+		if len(add) != len(ch.Steps) {
+			continue
+		}
+		proxies = append(proxies, add...)
+		for _, st := range ch.Steps {
+			known[st.Name] = true
+		}
 	}
 
 	target := func(t string) string { return OutboundFor(t, known) }
@@ -249,6 +269,24 @@ func Generate(in GenInput) (map[string]any, error) {
 	return m, nil
 }
 
+// socksOutbound leads to a local SOCKS5 endpoint (WSL, VM, tunnel process).
+func socksOutbound(ep LocalEndpoint, loopbackIface string) map[string]any {
+	server := ep.Server
+	if server == "" {
+		server = "127.0.0.1"
+	}
+	out := map[string]any{"type": "socks5", "server": server, "port": ep.Port,
+		"username": ep.User, "password": ep.Pass, "udp": true}
+	if ep.Iface != "" {
+		out["interface-name"] = ep.Iface
+	} else if loopbackIface != "" {
+		// mihomo binds outbound UDP sockets to the physical interface in
+		// TUN mode, which breaks UDP to loopback; pin it to loopback.
+		out["interface-name"] = loopbackIface
+	}
+	return out
+}
+
 // sniffer lets domain rules work for programs that resolve names on their
 // own (DNS over HTTPS in browsers, the browser inside apps): they connect to
 // a bare IP that the engine has never seen a DNS query for. The site name is
@@ -289,8 +327,12 @@ func sniffer() map[string]any {
 // garbage collection, and two devices with one key break each other's
 // session on the server.
 type TunnelInput struct {
-	Outbounds      map[string]map[string]any // connection id -> outbound
-	Ports          map[string]int            // connection id -> SOCKS5 listener port
+	Outbounds map[string]map[string]any // connection id -> outbound
+	Ports     map[string]int            // connection id -> SOCKS5 listener port
+	// Upstreams: outbounds that reach their server through the routing
+	// engine (chain hops), name -> port of the engine's listener for the
+	// previous hop.
+	Upstreams      map[string]int
 	User, Pass     string
 	ControllerPort int
 	Secret         string
@@ -315,6 +357,12 @@ func GenerateTunnels(in TunnelInput) map[string]any {
 			out[k] = v
 		}
 		out["name"] = id
+		if port, ok := in.Upstreams[id]; ok {
+			up := "up-" + id
+			out["dialer-proxy"] = up
+			proxies = append(proxies, map[string]any{"name": up, "type": "socks5",
+				"server": "127.0.0.1", "port": port, "udp": true})
+		}
 		proxies = append(proxies, out)
 		listeners = append(listeners, map[string]any{
 			"name": "in-" + id, "type": "socks", "listen": "127.0.0.1", "port": in.Ports[id],

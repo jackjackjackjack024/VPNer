@@ -111,6 +111,18 @@ h2 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
 .badge.native { color: var(--c-native); background: color-mix(in srgb, var(--c-native) 13%, transparent); border-color: transparent; }
 .badge.wsl { color: var(--c-wsl); background: color-mix(in srgb, var(--c-wsl) 13%, transparent); border-color: transparent; }
 .badge.vm { color: var(--c-vm); background: color-mix(in srgb, var(--c-vm) 13%, transparent); border-color: transparent; }
+.badge.chain { color: var(--ok); background: color-mix(in srgb, var(--ok) 13%, transparent); border-color: transparent; }
+.hops { display: grid; gap: 0; margin: 4px 0 10px; }
+.hop { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.hop .n { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600;
+  color: var(--on-accent); background: var(--cc, var(--accent)); }
+.hop .t { min-width: 0; } .hop .t b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hop .t small { color: var(--muted); font-size: 12px; } .hop .t small.bad { color: var(--bad); }
+.hop .acts { display: flex; gap: 2px; }
+.hop-arrow { text-align: center; color: var(--muted); font-size: 12px; line-height: 20px; padding-left: 12px; }
+.hop-add { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.hop-add select { flex: 1; min-width: 200px; }
 .state { font-size: 12.5px; font-weight: 600; }
 .state.ok { color: var(--ok); } .state.warn { color: var(--warn); } .state.bad { color: var(--bad); } .state.muted { color: var(--muted); }
 .empty { text-align: center; padding: 50px 20px; color: var(--muted); border: 1.5px dashed var(--line); border-radius: var(--radius); }
@@ -741,7 +753,9 @@ const ago = ts => { if (!ts) return ""; const s = Math.max(0, Math.floor(Date.no
 
 // ---------- state ----------
 const S = { tab: "conns", state: null, cfg: null, providers: [], logs: [], rulesDraft: null, rulesDirty: false, live: null, leak: null, info: {} };
-const RUNTIME = { native: ["native", tr("ui.builtIn")], wsl: ["wsl", tr("ui.wslContainer")], vm: ["vm", tr("ui.virtualMachine")] };
+const RUNTIME = { native: ["native", tr("ui.builtIn")], wsl: ["wsl", tr("ui.wslContainer")], vm: ["vm", tr("ui.virtualMachine")], chain: ["chain", tr("ui.chain.badge")] };
+// badgeOf: a chain is shown as a chain, not by the runtime it shares.
+const badgeOf = (type, runtime) => type === "chain" ? RUNTIME.chain : (RUNTIME[runtime] || ["", runtime || ""]);
 const STATES = {
   ready: ["ok", tr("ui.ready")], up: ["ok", tr("ui.connected")], starting: ["warn", tr("ui.connecting")], auth: ["warn", tr("ui.inputNeeded")],
   down: ["bad", tr("ui.noConnection")], failed: ["bad", tr("ui.error")], off: ["muted", tr("ui.disconnected")], stopped: ["muted", tr("ui.disconnected")], disabled: ["muted", tr("ui.off")],
@@ -1651,7 +1665,7 @@ function renderConns() {
   } else {
     h += `<div class="cards">` + conns.map(c => {
       const v = connView(c.id);
-      const [rcls, rtitle] = RUNTIME[v.runtime] || ["", v.runtime || ""];
+      const [rcls, rtitle] = badgeOf(c.type, v.runtime);
       const [scls, stitle] = STATES[v.state] || ["muted", v.state || ""];
       const isRuntime = v.runtime && v.runtime !== "native";
       const running = ["up", "starting", "auth", "confirm", "queued", "down", "provisioning", "novpn"].includes(v.state);
@@ -1663,7 +1677,7 @@ function renderConns() {
       if (v.localProxy) kv += `<span>${tr("ui.localProxy")}</span><span class="mono" title="${tr("ui.httpSocks5WithoutPasswordFor")}">127.0.0.1:${v.localProxy}</span>`;
       return `<div class="card cc ${c.enabled ? "" : "off"}" style="--cc: var(--conn-${c.id})">
         <div class="head"><span class="dot ${scls === "muted" ? "" : scls}"></span><div class="name" title="${esc(c.name)}">${esc(c.name)}</div><span class="badge ${rcls}">${esc(rtitle)}</span></div>
-        <div class="meta">${esc(v.typeTitle || c.type)} · <span class="state ${scls}">${esc(stitle)}</span></div>
+        <div class="meta">${c.type === "chain" ? esc(chainPath(c)) : esc(v.typeTitle || c.type)} · <span class="state ${scls}">${esc(stitle)}</span></div>
         ${v.detail && v.state !== "up" ? `<div class="detail">${esc(v.detail)}</div>` : ""}
         ${v.state === "starting" && v.since && Date.now() / 1000 - v.since > 8 ? `<div class="detail" style="color:var(--warn)">${tr("ui.connectingTakesLongerThanUsual")}</div>` : ""}
         ${kv ? `<div class="kv">${kv}</div>` : ""}
@@ -1700,7 +1714,8 @@ async function delConn(id) {
   const c = S.cfg.connections.find(x => x.id === id);
   const used = (S.cfg.rules || []).filter(r => r.target === id).length;
   const isVM = (connView(id).runtime === "vm");
-  if (!await ask(tr(isVM ? "ui.conn.deleteVm" : "ui.conn.deletePlain") + (used ? "\n\n" + tr("ui.conn.deleteRules", used) : ""), { title: tr("ui.common.deleteNamed", c.name), ok: tr("ui.common.delete"), danger: true })) return;
+  const chains = (S.cfg.connections || []).filter(x => x.type === "chain" && hopsOf(x).includes(id)).map(x => x.name);
+  if (!await ask(tr(isVM ? "ui.conn.deleteVm" : "ui.conn.deletePlain") + (used ? "\n\n" + tr("ui.conn.deleteRules", used) : "") + (chains.length ? "\n\n" + tr("ui.conn.deleteChains", chains.join(", ")) : ""), { title: tr("ui.common.deleteNamed", c.name), ok: tr("ui.common.delete"), danger: true })) return;
   await act(() => api("DELETE", "/api/connections/" + id), tr("ui.deleted")); await loadConfig(); render();
 }
 
@@ -1712,7 +1727,12 @@ function modal(html, opts = {}) {
   bg.addEventListener("mousedown", e => { if (e.target === bg && !opts.sticky) closeModal(); });
   return $(".modal", root);
 }
-function closeModal() { $("#modal-root").innerHTML = ""; promptOpen = null; }
+function closeModal() {
+  $("#modal-root").innerHTML = ""; promptOpen = null;
+  // A connection made from the chain editor was cancelled: back to the chain.
+  const back = takeChainReturn();
+  if (back) setTimeout(() => resumeChain(back), 0);
+}
 
 // ---------- app window behaviour ----------
 // In-app dialogs instead of the browser's alert/confirm. They stack above
@@ -1825,8 +1845,9 @@ document.addEventListener("dragstart", e => { if (!(e.target.closest && e.target
 document.addEventListener("keydown", e => { if (e.key === "Escape" && $("#modal-root").innerHTML) closeModal(); });
 
 function addConn() {
-  const types = S.providers.map(p => `<button class="type" onclick="editConn(null,'${p.type}')"><div class="row"><b class="grow">${esc(p.title)}</b><span class="badge ${RUNTIME[p.runtime][0]}">${RUNTIME[p.runtime][1]}</span></div><small>${esc(p.description)}</small></button>`).join("");
-  const m = modal(`<header><h3>${tr("ui.newConnection")}</h3><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
+  const forChain = S.chainReturn;
+  const types = S.providers.filter(p => !forChain || p.type !== "chain").map(p => `<button class="type" onclick="editConn(null,'${p.type}')"><div class="row"><b class="grow">${esc(p.title)}</b><span class="badge ${badgeOf(p.type, p.runtime)[0]}">${badgeOf(p.type, p.runtime)[1]}</span></div><small>${esc(p.description)}</small></button>`).join("");
+  const m = modal(`<header><h3>${forChain ? tr("ui.chain.newHop", forChain.name || tr("ui.chain.unnamed")) : tr("ui.newConnection")}</h3><button class="icon-btn" onclick="closeModal()" aria-label="${forChain ? tr("ui.chain.back") : tr("ui.close")}">${ICON.close}</button></header>
     <div class="body">
       <div class="drop" id="drop">
         <b>${tr("ui.pasteKeyLinksOrConfig")}</b>
@@ -1857,7 +1878,9 @@ async function importFlow(src) {
   const prev = await act(() => api("POST", "/api/import", { ...src, dry: true }));
   if (prev.kind === "single") {
     const r = await act(() => api("POST", "/api/import", src));
+    const back = takeChainReturn();
     await loadConfig(); closeModal(); render(); toast(tr("ui.connectionAdded"));
+    if (back) return resumeChain(back, r.ids[0]);
     return editConn(r.ids[0]);
   }
   showImportSummary(src, prev);
@@ -1904,6 +1927,7 @@ async function importFiles(files) {
 
 let ifaceCache = null;
 async function editConn(id, type) {
+  if ((type || (S.cfg.connections.find(x => x.id === id) || {}).type) === "chain") return editChain(id);
   const c = id ? structuredClone(S.cfg.connections.find(x => x.id === id)) : { id: "", name: "", type, enabled: true, autostart: true, params: {}, secretSet: {} };
   const p = S.providers.find(x => x.type === c.type);
   if (!p) return toast(tr("ui.conn.unknownType", c.type), true);
@@ -1941,10 +1965,101 @@ async function editConn(id, type) {
       else out.params[el.dataset.k] = v;
     });
     if (!out.name) return toast(tr("ui.enterName"), true);
-    await act(() => api("POST", "/api/connections", out), tr("ui.saved"));
+    const r = await act(() => api("POST", "/api/connections", out), tr("ui.saved"));
+    const back = !c.id ? takeChainReturn() : null;
     closeModal(); await loadConfig(); render();
+    if (back) resumeChain(back, r.id);
   };
   setTimeout(() => $("#f-name", m).focus(), 50);
+}
+
+// ---------- chains ----------
+// A chain is made of other connections: traffic enters the first, goes
+// through it into the next and leaves through the last. The connections
+// stay usable on their own; WireGuard/AmneziaWG hops after the first run as
+// a copy, and one key cannot work in two places at once.
+const TUNNEL_TYPES = ["wireguard", "amnezia-server"];
+const connById = id => (S.cfg.connections || []).find(c => c.id === id);
+const hopsOf = c => String((c.params || {}).hops || "").split(",").map(x => x.trim()).filter(Boolean);
+function chainPath(c) {
+  const names = hopsOf(c).map(id => (connById(id) || {}).name || "?");
+  return names.length ? names.join(" → ") : tr("ui.chain.empty");
+}
+const providerOf = type => S.providers.find(p => p.type === type) || {};
+function takeChainReturn() { const b = S.chainReturn; S.chainReturn = null; return b; }
+function resumeChain(back, newId) {
+  if (newId && connById(newId) && !back.hops.includes(newId)) back.hops.push(newId);
+  editChain(back.id, back);
+}
+// chainIssues lists what stops a draft chain from working, per hop and overall.
+function chainIssues(d) {
+  const hop = {}, all = [];
+  d.hops.forEach((id, i) => {
+    const c = connById(id);
+    if (!c) { hop[id] = tr("ui.chain.hopGone"); return; }
+    if (i === 0 && !c.enabled) all.push(tr("ui.chain.firstOff", c.name));
+    if (i > 0 && !providerOf(c.type).follow) hop[id] = tr("ui.chain.onlyFirst");
+    if (i > 0 && TUNNEL_TYPES.includes(c.type) && c.enabled) all.push(tr("ui.chain.keyTwice", c.name));
+  });
+  if (d.hops.length < 2) all.unshift(tr("ui.chain.needTwo"));
+  return { hop, all };
+}
+function editChain(id, draft) {
+  const c = id ? connById(id) : null;
+  const d = draft || { id: id || "", name: c ? c.name : "", enabled: c ? c.enabled : true, hops: c ? hopsOf(c) : [] };
+  const read = m => { d.name = $("#ch-name", m).value.trim(); d.enabled = $("#ch-enabled", m).checked; };
+  const draw = () => {
+    const iss = chainIssues(d);
+    const others = (S.cfg.connections || []).filter(x => x.type !== "chain" && !d.hops.includes(x.id));
+    const canAdd = others.filter(x => d.hops.length === 0 || providerOf(x.type).follow);
+    const rows = d.hops.map((hid, i) => {
+      const h = connById(hid) || { name: "?", type: "" };
+      const role = i === 0 ? tr("ui.chain.entry") : i === d.hops.length - 1 ? tr("ui.chain.exit") : tr("ui.chain.middle");
+      const note = iss.hop[hid];
+      return `${i ? `<div class="hop-arrow" aria-hidden="true">↓</div>` : ""}<div class="hop" style="--cc: var(--conn-${hid})">
+        <span class="n">${i + 1}</span>
+        <div class="t"><b title="${esc(h.name)}">${esc(h.name)}</b><small class="${note ? "bad" : ""}">${esc(note || `${role} · ${providerOf(h.type).title || h.type}${h.enabled === false ? tr("ui.common.disabledSuffix") : ""}`)}</small></div>
+        <div class="acts">
+          <button class="icon-btn" data-mv="${i},-1" title="${tr("ui.moveUp")}" aria-label="${tr("ui.moveUp")}" ${i === 0 ? "disabled" : ""}>${ICON.up}</button>
+          <button class="icon-btn" data-mv="${i},1" title="${tr("ui.moveDown")}" aria-label="${tr("ui.moveDown")}" ${i === d.hops.length - 1 ? "disabled" : ""}>${ICON.down}</button>
+          <button class="icon-btn" data-rm="${i}" title="${tr("ui.chain.removeHop")}" aria-label="${tr("ui.chain.removeHop")}">${ICON.close}</button>
+        </div></div>`;
+    }).join("");
+    const m = modal(`<header><h3>${id ? tr("ui.edit") : tr("ui.new")}: ${tr("ui.chain.title")}</h3><span class="badge chain">${RUNTIME.chain[1]}</span><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
+      <div class="body">
+        <p class="help" style="color:var(--muted);margin-top:0">${tr("ui.chain.lead")}</p>
+        <div class="field"><span>${tr("ui.name")}</span><input type="text" id="ch-name" value="${esc(d.name)}" placeholder="${tr("ui.chain.namePlaceholder")}"></div>
+        <div class="field"><span>${tr("ui.chain.hops")}</span>
+          ${rows ? `<div class="hops">${rows}</div>` : `<p class="help" style="color:var(--muted);margin:2px 0 8px">${tr("ui.chain.noHops")}</p>`}
+          <div class="hop-add">
+            <select id="ch-pick" aria-label="${tr("ui.chain.addHop")}" ${canAdd.length ? "" : "disabled"}>${canAdd.length ? canAdd.map(x => `<option value="${x.id}">${esc(x.name)}${x.enabled ? "" : tr("ui.common.disabledSuffix")}</option>`).join("") : `<option>${tr("ui.chain.nothingToAdd")}</option>`}</select>
+            <button class="btn" id="ch-add" ${canAdd.length ? "" : "disabled"}>${tr("ui.chain.addHop")}</button>
+            <button class="btn" id="ch-new">${tr("ui.chain.newConnection")}</button>
+          </div>
+          ${d.hops.length && others.length > canAdd.length ? `<span class="help">${tr("ui.chain.followHint")}</span>` : ""}
+        </div>
+        ${iss.all.length ? `<div class="banner warn" style="display:block;margin:6px 0 10px"><ul style="margin:0;padding-left:18px">${iss.all.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        <label class="check"><input type="checkbox" class="switch" id="ch-enabled" ${d.enabled ? "checked" : ""}><span>${tr("ui.on")}</span></label>
+      </div>
+      <footer><button class="btn" onclick="closeModal()">${tr("ui.cancel")}</button><button class="btn primary" id="ch-save">${tr("ui.save")}</button></footer>`, { sticky: true, wide: true });
+    $$("[data-mv]", m).forEach(b => b.onclick = () => {
+      read(m); const [i, dir] = b.dataset.mv.split(",").map(Number);
+      [d.hops[i], d.hops[i + dir]] = [d.hops[i + dir], d.hops[i]]; draw();
+    });
+    $$("[data-rm]", m).forEach(b => b.onclick = () => { read(m); d.hops.splice(Number(b.dataset.rm), 1); draw(); });
+    $("#ch-add", m).onclick = () => { read(m); const v = $("#ch-pick", m).value; if (connById(v)) { d.hops.push(v); draw(); } };
+    $("#ch-new", m).onclick = () => { read(m); S.chainReturn = d; addConn(); };
+    $("#ch-save", m).onclick = async () => {
+      read(m);
+      if (!d.name) return toast(tr("ui.enterName"), true);
+      const out = { id: d.id, name: d.name, type: "chain", enabled: d.enabled, autostart: false, params: { hops: d.hops.join(",") }, secrets: {} };
+      await act(() => api("POST", "/api/connections", out), tr("ui.saved"));
+      closeModal(); await loadConfig(); render();
+    };
+    return m;
+  };
+  const m = draw();
+  if (!d.name) setTimeout(() => $("#ch-name", m).focus(), 50);
 }
 
 function showPrompt(v, force) {

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"vpner/internal/config"
 	"vpner/internal/engine"
 	"vpner/internal/providers"
 	"vpner/internal/winutil"
@@ -96,11 +97,28 @@ func (a *App) probeNative(m *engine.Mihomo) {
 			a.notify()
 			a.mu.Lock()
 		}
+		// A chain whose first hop does not answer is not rebuilt: the
+		// trouble is in that hop, which is recovered by itself.
+		if c.Type == config.TypeChain {
+			if hops := c.Hops(); len(hops) > 0 {
+				if fh := a.health[hops[0]]; fh != nil && fh.down {
+					a.mu.Unlock()
+					continue
+				}
+			}
+		}
 		if h.fails >= recoverAfter && time.Since(h.lastRecover) > recoverPause {
 			h.lastRecover = time.Now()
 			needRecover = append(needRecover, c.Name)
 			if a.tun != nil && a.tun.ids[c.ID] {
 				tunnels = true
+			}
+			for _, ch := range engine.Chains(cfg) {
+				for _, st := range ch.Steps {
+					if ch.ID == c.ID && st.Tunnel {
+						tunnels = true
+					}
+				}
 			}
 		}
 		a.mu.Unlock()

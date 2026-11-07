@@ -51,6 +51,30 @@ type Connection struct {
 	Secrets map[string]string `json:"secrets,omitempty"`
 }
 
+// TypeChain is a connection made of other connections: traffic goes into
+// the first one, through it into the second and so on, and leaves the
+// internet through the last. Its hops are kept in Params["hops"].
+const TypeChain = "chain"
+
+// Hops lists the connection ids of a chain, first hop first.
+func (c *Connection) Hops() []string {
+	var out []string
+	for _, h := range strings.Split(c.P("hops"), ",") {
+		if h = strings.TrimSpace(h); h != "" {
+			out = append(out, h)
+		}
+	}
+	return out
+}
+
+// SetHops stores the hops of a chain.
+func (c *Connection) SetHops(ids []string) {
+	if c.Params == nil {
+		c.Params = map[string]string{}
+	}
+	c.Params["hops"] = strings.Join(ids, ",")
+}
+
 func (c *Connection) P(key string) string {
 	if c.Params == nil {
 		return ""
@@ -169,6 +193,9 @@ func (c *Config) Validate() error {
 		}
 		ids[cn.ID] = true
 	}
+	if err := c.validateChains(); err != nil {
+		return err
+	}
 	check := func(t, where string) error {
 		if t == TargetDirect || t == TargetBlock || ids[t] {
 			return nil
@@ -184,6 +211,35 @@ func (c *Config) Validate() error {
 		return err
 	}
 	return c.DNS.validate(ids)
+}
+
+// validateChains checks that chains consist of existing connections that
+// are not chains themselves. A chain that is on needs at least two hops.
+func (c *Config) validateChains() error {
+	for _, cn := range c.Connections {
+		if cn.Type != TypeChain {
+			continue
+		}
+		hops := cn.Hops()
+		if cn.Enabled && len(hops) < 2 {
+			return fmt.Errorf(i18n.T("config.chainNeedsTwoHops"), cn.Name)
+		}
+		seen := map[string]bool{}
+		for _, h := range hops {
+			hc := c.Conn(h)
+			if hc == nil {
+				return fmt.Errorf(i18n.T("config.chainHopNotFound"), cn.Name)
+			}
+			if hc.Type == TypeChain {
+				return fmt.Errorf(i18n.T("config.chainHopIsChain"), cn.Name)
+			}
+			if seen[h] {
+				return fmt.Errorf(i18n.T("config.chainHopRepeats"), cn.Name, hc.Name)
+			}
+			seen[h] = true
+		}
+	}
+	return nil
 }
 
 func ruleTitle(r Rule) string {

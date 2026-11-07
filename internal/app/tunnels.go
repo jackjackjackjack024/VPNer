@@ -8,6 +8,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"vpner/internal/config"
 	"vpner/internal/engine"
 	"vpner/internal/providers"
 )
@@ -26,11 +27,14 @@ type tunnelProc struct {
 	gen   int             // bumped on every deliberate (re)start or stop
 }
 
-// tunnelOutbounds returns the outbounds that belong in the tunnel process.
-func (a *App) tunnelOutbounds() map[string]map[string]any {
+// tunnelOutbounds returns the outbounds that belong in the tunnel process,
+// and for the copies that are chain hops the routing engine outbound each
+// one reaches its server through.
+func (a *App) tunnelOutbounds() (map[string]map[string]any, map[string]string) {
 	outs := map[string]map[string]any{}
-	for _, c := range a.Config().Connections {
-		if !c.Enabled {
+	cfg := a.Config()
+	for _, c := range cfg.Connections {
+		if !c.Enabled || c.Type == config.TypeChain {
 			continue
 		}
 		p, err := providers.Get(c.Type)
@@ -48,7 +52,11 @@ func (a *App) tunnelOutbounds() map[string]map[string]any {
 		}
 		outs[c.ID] = out
 	}
-	return outs
+	chained, prev := engine.ChainTunnels(cfg)
+	for name, out := range chained {
+		outs[name] = out
+	}
+	return outs, prev
 }
 
 // syncTunnels brings the tunnel process in line with the configuration.
@@ -56,7 +64,7 @@ func (a *App) tunnelOutbounds() map[string]map[string]any {
 func (a *App) syncTunnels(force bool) error {
 	a.tunMu.Lock()
 	defer a.tunMu.Unlock()
-	outs := a.tunnelOutbounds()
+	outs, prev := a.tunnelOutbounds()
 
 	a.mu.Lock()
 	t := a.tun
@@ -109,8 +117,16 @@ func (a *App) syncTunnels(force bool) error {
 	for id, p := range t.ports {
 		ports[id] = p
 	}
+	// A chain hop reaches its server through the routing engine's listener
+	// for the previous hop; the engine opens it on the same port.
+	ups := map[string]int{}
+	for name, via := range prev {
+		if p := a.testPortLocked(via); p != 0 {
+			ups[name] = p
+		}
+	}
 	a.mu.Unlock()
-	conf := engine.GenerateTunnels(engine.TunnelInput{Outbounds: outs, Ports: ports,
+	conf := engine.GenerateTunnels(engine.TunnelInput{Outbounds: outs, Ports: ports, Upstreams: ups,
 		User: t.user, Pass: t.pass, ControllerPort: t.m.Port, Secret: t.m.Secret})
 	b, err := yaml.Marshal(conf)
 	if err != nil {
