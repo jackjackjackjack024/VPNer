@@ -206,3 +206,38 @@ func TestProfileChain(t *testing.T) {
 		t.Errorf("chain users must follow the new hop ids: %v", ch.Secrets)
 	}
 }
+
+// A VM with a program VPNer sets up keeps its subscription link in a profile
+// exported with secrets, but not the identity of the VM: imported, it is a
+// new VM, so the program in it counts as a new device.
+func TestProfileVMApp(t *testing.T) {
+	cfg := config.Default()
+	cfg.Connections = []config.Connection{{ID: "cvm", Name: "VM", Type: "hyperv", Enabled: true,
+		Params:  map[string]string{"app": "incy", "lanIp": "10.77.0.10", "wanMac": "00155D000001", "lanMac": "00155D000002"},
+		Secrets: map[string]string{"subscription": "https://sub.example.com/x", "gwPass": "secret"}}}
+	for _, withSecrets := range []bool{true, false} {
+		b, err := Export(cfg, withSecrets)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := Parse("profile.json", string(b))
+		if err != nil {
+			t.Fatal(err)
+		}
+		c := res.Connections[0]
+		if c.P("app") != "incy" {
+			t.Errorf("app lost: %v", c.Params)
+		}
+		if got := c.S("subscription"); (got != "") != withSecrets {
+			t.Errorf("withSecrets=%v: subscription %q", withSecrets, got)
+		}
+		for _, k := range []string{"lanIp", "wanMac", "lanMac"} {
+			if c.P(k) != "" {
+				t.Errorf("%s must not move to another VM", k)
+			}
+		}
+		if c.S("gwPass") != "" || c.ID == "cvm" {
+			t.Error("the imported VM must be a new one")
+		}
+	}
+}
