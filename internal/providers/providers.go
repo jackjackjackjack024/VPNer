@@ -240,4 +240,5 @@ type VMSpec struct {
 	Desktop  bool   `json:"desktop"`
 	WANMode  string `json:"wanMode"` // external|nat
 	DNS      []string
+	App      string // VPN program VPNer installs and sets up in the VM ("" = the user does)
 }

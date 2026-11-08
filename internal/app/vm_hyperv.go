@@ -3,6 +3,8 @@ package app
 import (
 	"vpner/internal/i18n"
 
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"vpner/internal/assets"
@@ -133,7 +136,7 @@ func (a *App) vmConnect(id string, p VMRuntime) error {
 			ID: id + "-" + randHex(3), Hostname: "vpner-" + id, LANIP: c.P("lanIp"),
 			WANMac: hyperv.MACColon(c.P("wanMac")), LANMac: hyperv.MACColon(c.P("lanMac")),
 			GatewayUser: "vpner", GatewayPass: c.S("gwPass"), ConsolePass: c.P("consolePassword"),
-			Desktop: spec.Desktop, FallbackDNS: spec.DNS, Agent: agent,
+			Desktop: spec.Desktop, FallbackDNS: spec.DNS, Agent: agent, App: spec.App,
 		})
 		if err != nil {
 			return fail(err)
@@ -145,6 +148,14 @@ func (a *App) vmConnect(id string, p VMRuntime) error {
 		os.RemoveAll(seed)
 		if err != nil {
 			return fail(err)
+		}
+		// Remember what was set up in this VM: the app is installed only
+		// when the VM is created.
+		os.Remove(filepath.Join(dir, vmSubSent))
+		if spec.App != "" {
+			if err := os.WriteFile(filepath.Join(dir, vmAppFile), []byte(spec.App), 0o644); err != nil {
+				a.Log.Warnf(id, "%v", err)
+			}
 		}
 	}
 	a.clearProgress()
@@ -214,8 +225,17 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 		case len(st.Tunnels) == 0:
 			state = "novpn"
 			detail = i18n.T("app.openVmWindowAndConnect")
+			if app := a.vmApp(id); app != "" {
+				detail = i18n.T("app.vmAppConnecting")
+			}
 			if st.Provision == "running" {
 				detail = i18n.T("app.vmIsStillBeingSet")
+				if a.vmApp(id) != "" {
+					detail = i18n.T("app.vmAppInstalling")
+				}
+			}
+			if st.Provision == "error" && a.vmApp(id) != "" {
+				detail = i18n.T("app.vmAppSetupFailed")
 			}
 		default:
 			state = "up"
@@ -228,6 +248,9 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 		if state != lastState {
 			a.Log.Infof(id, "%s: %s", state, detail)
 			lastState = state
+		}
+		if err == nil {
+			a.deliverVMApp(id)
 		}
 		a.setConn(id, func(r *connRuntime) {
 			if r.State != state {
@@ -302,6 +325,62 @@ func (a *App) removeVM(id string) {
 	} else {
 		a.Log.Infof(id, i18n.T("app.virtualMachineDeleted"), name)
 	}
+}
+
+// Files in the VM's folder on the host: the app VPNer set up in it, and the
+// hash of the subscription link last handed to that app.
+const (
+	vmAppFile = "app"
+	vmSubSent = "subscription.sent"
+)
+
+// vmApp returns the program VPNer set up in the VM of a connection.
+func (a *App) vmApp(id string) string {
+	b, err := os.ReadFile(filepath.Join(a.vmDir(id), vmAppFile))
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
+var vmDeliverTry sync.Map // connection id -> time of the last attempt
+
+// deliverVMApp hands the app in the VM the subscription link the user
+// entered, once per link: the app adds a subscription every time it gets
+// one. The link travels over the gateway's channel into the shared folder,
+// where a script of the VM passes it to the app and deletes it; it is never
+// written to the VM's setup disk.
+func (a *App) deliverVMApp(id string) {
+	if a.vmApp(id) != hyperv.AppIncy {
+		return
+	}
+	c := a.Config().Conn(id)
+	if c == nil {
+		return
+	}
+	link := NormalizeSubscription(c.S("subscription"))
+	if link == "" {
+		return
+	}
+	sum := sha256.Sum256([]byte(link))
+	mark := filepath.Join(a.vmDir(id), vmSubSent)
+	if b, _ := os.ReadFile(mark); strings.TrimSpace(string(b)) == hex.EncodeToString(sum[:]) {
+		return
+	}
+	// The status is checked every few seconds; a failed attempt is retried
+	// at most every half minute.
+	if t, ok := vmDeliverTry.Load(id); ok && time.Since(t.(time.Time)) < 30*time.Second {
+		return
+	}
+	vmDeliverTry.Store(id, time.Now())
+	if err := a.VMUpload(id, hyperv.IncySubscriptionFile, strings.NewReader(link+"\n")); err != nil {
+		a.Log.Warnf(id, i18n.T("app.vmAppSubscriptionNotSent"), err)
+		return
+	}
+	if err := os.WriteFile(mark, []byte(hex.EncodeToString(sum[:])), 0o644); err != nil {
+		a.Log.Warnf(id, "%v", err)
+	}
+	a.Log.Infof(id, "%s", i18n.T("app.vmAppSubscriptionSent"))
 }
 
 // VMUpload sends a file into the VM's shared folder.

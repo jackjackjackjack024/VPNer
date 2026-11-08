@@ -3,6 +3,7 @@ package providers
 import (
 	"vpner/internal/i18n"
 
+	"fmt"
 	"strconv"
 
 	"vpner/internal/config"
@@ -21,8 +22,16 @@ func (hypervProvider) Description() string {
 	return i18n.T("providers.separateHyperVVirtualMachine")
 }
 
+// VMAppIncy: VPNer installs INCY in the VM and sets it up (hyperv.AppIncy).
+const VMAppIncy = "incy"
+
 func (hypervProvider) Fields() []Field {
 	return []Field{
+		{Key: "app", Label: i18n.T("providers.vmApp"), Kind: "select", Default: "",
+			Options: []Option{{Value: "", Label: i18n.T("providers.vmAppManual")}, {Value: VMAppIncy, Label: i18n.T("providers.vmAppIncy")}},
+			Help:    i18n.T("providers.vmAppHelp")},
+		{Key: "subscription", Label: i18n.T("providers.vmAppSubscription"), Kind: "text", Secret: true,
+			Placeholder: "https://…", Help: i18n.T("providers.vmAppSubscriptionHelp")},
 		{Key: "memory", Label: i18n.T("providers.vmMemoryMb"), Kind: "number", Default: "3072", Help: i18n.T("providers.2048IsMinimumForDesktop")},
 		{Key: "cpus", Label: i18n.T("providers.processors"), Kind: "number", Default: "2"},
 		{Key: "desktop", Label: i18n.T("providers.desktopAndBrowser"), Kind: "bool", Default: "true", Help: i18n.T("providers.neededForGraphicalVpnPrograms")},
@@ -40,12 +49,17 @@ func atoiDefault(s string, def, minv, maxv int) int {
 }
 
 func (hypervProvider) VM(c *config.Connection) (*VMSpec, error) {
+	if app := c.P("app"); app != "" && app != VMAppIncy {
+		return nil, fmt.Errorf(i18n.T("providers.vmAppUnknown"), app)
+	}
 	return &VMSpec{
 		VMName:   "VPNer - " + c.ID,
 		MemoryMB: atoiDefault(c.P("memory"), 3072, 1024, 65536),
 		CPUs:     atoiDefault(c.P("cpus"), 2, 1, 64),
 		DiskGB:   atoiDefault(c.P("disk"), 24, 8, 2048),
-		Desktop:  boolDefault(c, "desktop", true),
-		DNS:      dnsList(c),
+		// A program VPNer sets up itself has a window: it needs the desktop.
+		Desktop: boolDefault(c, "desktop", true) || c.P("app") != "",
+		DNS:     dnsList(c),
+		App:     c.P("app"),
 	}, nil
 }
