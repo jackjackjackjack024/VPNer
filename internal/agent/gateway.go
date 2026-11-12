@@ -44,6 +44,9 @@ type GatewayStatus struct {
 	DNS        []string `json:"dns"`
 	Provision  string   `json:"provision"` // running|done|error
 	Uptime     int64    `json:"uptime"`
+	// Step: the package being installed while the setup runs (dpkg.log is
+	// readable by the gateway user, the cloud-init log is not).
+	Step string `json:"step,omitempty"`
 }
 
 type Tunnel struct {
@@ -182,8 +185,26 @@ func provisionState() string {
 }
 
 func (g *gateway) status() GatewayStatus {
-	return GatewayStatus{Version: Version, Tunnels: g.tunnels(), DefaultVia: defaultRouteIface(), DNS: g.dnsServers(),
+	s := GatewayStatus{Version: Version, Tunnels: g.tunnels(), DefaultVia: defaultRouteIface(), DNS: g.dnsServers(),
 		Provision: provisionState(), Uptime: int64(time.Since(g.start).Seconds())}
+	if s.Provision == "running" {
+		s.Step = dpkgStep(fileTail("/var/log/dpkg.log", 8<<10), g.start.Add(-time.Minute))
+	}
+	return s
+}
+
+// fileTail returns up to n last bytes of a file ("" when it cannot be read).
+func fileTail(path string, n int64) string {
+	f, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	if st, err := f.Stat(); err == nil && st.Size() > n {
+		f.Seek(-n, io.SeekEnd)
+	}
+	b, _ := io.ReadAll(io.LimitReader(f, n))
+	return string(b)
 }
 
 var resolvectlLinkRe = regexp.MustCompile(`^Link \d+ \(([^)]+)\):\s*(.*)$`)

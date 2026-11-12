@@ -3,6 +3,8 @@
 package winutil
 
 import (
+	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -62,7 +64,46 @@ func FocusAppWindow(title string) bool {
 	if len(wins) == 0 {
 		return false
 	}
-	h := wins[0]
+	focus(wins[0])
+	return true
+}
+
+// findProcessWindows returns the visible top-level windows of the processes
+// named exe whose title starts with prefix.
+func findProcessWindows(exe, prefix string) []uintptr {
+	var found []uintptr
+	cb := syscall.NewCallback(func(h, _ uintptr) uintptr {
+		if v, _, _ := procIsWindowVisible.Call(h); v == 0 {
+			return 1
+		}
+		if strings.HasPrefix(windowText(h, procGetWindowTextW), prefix) && strings.EqualFold(windowProcess(h), exe) {
+			found = append(found, h)
+		}
+		return 1
+	})
+	procEnumWindows.Call(cb, 0)
+	return found
+}
+
+// windowProcess returns the file name of the program that owns window h.
+func windowProcess(h uintptr) string {
+	var pid uint32
+	windows.GetWindowThreadProcessId(windows.HWND(h), &pid)
+	p, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return ""
+	}
+	defer windows.CloseHandle(p)
+	buf := make([]uint16, windows.MAX_PATH)
+	n := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(p, 0, &buf[0], &n); err != nil {
+		return ""
+	}
+	return filepath.Base(windows.UTF16ToString(buf[:n]))
+}
+
+// focus brings window h to the front, restoring it when it is minimized.
+func focus(h uintptr) {
 	if iconic, _, _ := procIsIconic.Call(h); iconic != 0 {
 		procShowWindow.Call(h, swRestore)
 	} else {
@@ -74,7 +115,6 @@ func FocusAppWindow(title string) bool {
 	procKeybdEvent.Call(vkMenu, 0, keyeventfKeyUp, 0)
 	procBringWindowToTop.Call(h)
 	procSetForegroundWindow.Call(h)
-	return true
 }
 
 // CountAppWindows is used to verify that no duplicate windows are opened.

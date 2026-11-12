@@ -6,7 +6,6 @@ import (
 	"vpner/internal/i18n"
 
 	"archive/tar"
-	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"errors"
@@ -16,6 +15,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unsafe"
 
 	"github.com/ulikunitz/xz"
 	"golang.org/x/sys/windows"
@@ -32,7 +32,16 @@ func EnsureBaseImage(cacheDir, imagesDir string, progress deps.Progress) (string
 	}
 	out := filepath.Join(imagesDir, "debian-13-"+deps.DebianRelease+".vhd")
 	if st, err := os.Stat(out); err == nil && st.Size() > 1<<30 {
-		return out, nil
+		// VPNer 0.3.0 and earlier wrote the image as an NTFS sparse file,
+		// which newer Hyper-V refuses as the source of Convert-VHD. Make it a
+		// plain file; if that fails, unpack it again from the archive.
+		if progress != nil {
+			progress(i18n.T("hyperv.preparingVirtualMachineDisk"), 0, -1)
+		}
+		if err := plainFile(out); err == nil {
+			return out, nil
+		}
+		os.Remove(out)
 	}
 	archive, err := deps.Fetch(a, cacheDir, progress)
 	if err != nil {
@@ -69,15 +78,19 @@ func extractRawToVHD(archive, dst string, progress deps.Progress) error {
 			return fmt.Errorf(i18n.T("hyperv.vmImage"), err)
 		}
 		if strings.HasSuffix(h.Name, ".raw") {
-			return writeSparseVHD(tr, h.Size, dst, progress)
+			if err := writeVHD(tr, h.Size, dst, progress); err != nil {
+				return err
+			}
+			// a compressed folder would compress the new file as well
+			return plainFile(dst)
 		}
 	}
 }
 
-// writeSparseVHD writes the raw disk as an NTFS sparse file (zero blocks are
-// skipped, so a 3 GB image takes only what it really contains) and appends
-// a fixed-VHD footer.
-func writeSparseVHD(r io.Reader, size int64, dst string, progress deps.Progress) error {
+// writeVHD writes the raw disk and appends a fixed-VHD footer. The zero
+// blocks are written out too: Hyper-V refuses a sparse, compressed or
+// encrypted file as the source of Convert-VHD (0xC03A001A).
+func writeVHD(r io.Reader, size int64, dst string, progress deps.Progress) error {
 	if size%512 != 0 {
 		return errors.New(i18n.T("hyperv.vmImageDiskSizeIs"))
 	}
@@ -86,22 +99,13 @@ func writeSparseVHD(r io.Reader, size int64, dst string, progress deps.Progress)
 		return err
 	}
 	defer out.Close()
-	var ret uint32
-	const fsctlSetSparse = 0x000900c4
-	windows.DeviceIoControl(windows.Handle(out.Fd()), fsctlSetSparse, nil, 0, nil, 0, &ret, nil)
-
 	buf := make([]byte, 1<<20)
-	zero := make([]byte, len(buf))
 	var done int64
 	last := time.Time{}
 	for done < size {
 		n, err := io.ReadFull(r, buf[:min(int64(len(buf)), size-done)])
 		if n > 0 {
-			if bytes.Equal(buf[:n], zero[:n]) {
-				if _, err := out.Seek(int64(n), io.SeekCurrent); err != nil {
-					return err
-				}
-			} else if _, err := out.Write(buf[:n]); err != nil {
+			if _, err := out.Write(buf[:n]); err != nil {
 				return err
 			}
 			done += int64(n)
@@ -114,13 +118,52 @@ func writeSparseVHD(r io.Reader, size int64, dst string, progress deps.Progress)
 			last = time.Now()
 		}
 	}
-	if _, err := out.Seek(size, io.SeekStart); err != nil {
-		return err
-	}
 	if _, err := out.Write(vhdFooter(uint64(size))); err != nil {
 		return err
 	}
 	return out.Sync()
+}
+
+const (
+	fsctlSetSparse      = 0x000900c4
+	fsctlSetCompression = 0x0009c040
+)
+
+// plainFile clears the NTFS sparse and compressed flags of a file. Clearing
+// the sparse flag makes NTFS allocate the ranges that were left out, so the
+// file then holds every byte; its content and length stay the same.
+func plainFile(path string) error {
+	p, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	attrs, err := windows.GetFileAttributes(p)
+	if err != nil {
+		return err
+	}
+	if attrs&(windows.FILE_ATTRIBUTE_SPARSE_FILE|windows.FILE_ATTRIBUTE_COMPRESSED) == 0 {
+		return nil
+	}
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	h := windows.Handle(f.Fd())
+	var ret uint32
+	if attrs&windows.FILE_ATTRIBUTE_COMPRESSED != 0 {
+		none := uint16(0) // COMPRESSION_FORMAT_NONE
+		if err := windows.DeviceIoControl(h, fsctlSetCompression, (*byte)(unsafe.Pointer(&none)), 2, nil, 0, &ret, nil); err != nil {
+			return err
+		}
+	}
+	if attrs&windows.FILE_ATTRIBUTE_SPARSE_FILE != 0 {
+		off := byte(0) // FILE_SET_SPARSE_BUFFER{SetSparse: FALSE}
+		if err := windows.DeviceIoControl(h, fsctlSetSparse, &off, 1, nil, 0, &ret, nil); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // vhdFooter builds the 512-byte footer of a fixed VHD (VHD spec v1.0).

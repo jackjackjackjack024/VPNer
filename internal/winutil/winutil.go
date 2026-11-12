@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -189,9 +190,31 @@ func appProfilePrefs(profileDir string) {
 	os.WriteFile(p, b, 0o600)
 }
 
-// OpenVMConsole opens the Hyper-V console window of a VM.
+// OpenVMConsole shows the Hyper-V console window of a VM. A window that is
+// already open is brought to the front; otherwise vmconnect is started and
+// its window is brought to the front once it appears. Started by VPNer, a
+// background process, vmconnect would open behind the other windows, so it
+// looked as if nothing happened and every click opened one more window.
 func OpenVMConsole(vm string) error {
-	return exec.Command(filepath.Join(os.Getenv("WINDIR"), "System32", "vmconnect.exe"), "localhost", vm).Start()
+	const exe = "vmconnect.exe"
+	prefix := vm + " " // "<VM> on localhost - Virtual Machine Connection", localized
+	if w := findProcessWindows(exe, prefix); len(w) > 0 {
+		focus(w[0])
+		return nil
+	}
+	if err := exec.Command(filepath.Join(os.Getenv("WINDIR"), "System32", exe), "localhost", vm).Start(); err != nil {
+		return err
+	}
+	go func() {
+		for i := 0; i < 60; i++ { // up to 30 s: vmconnect is slow to start
+			time.Sleep(500 * time.Millisecond)
+			if w := findProcessWindows(exe, prefix); len(w) > 0 {
+				focus(w[0])
+				return
+			}
+		}
+	}()
+	return nil
 }
 
 // AttachParentConsole makes CLI output visible when started from a terminal
