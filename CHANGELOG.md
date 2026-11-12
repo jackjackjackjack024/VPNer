@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-12
+
 ### Added
 
 - The card of a virtual machine shows how its first setup goes: how many minutes it has been running, which package it is installing, and that nothing has changed for a long time if it seems stuck. Before, it only said that the setup takes 5–15 minutes. Packages are shown for VMs created with this version; for older ones, the time.
