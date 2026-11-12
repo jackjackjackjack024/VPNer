@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
 ### Added
 
 - A virtual machine can set up its VPN program by itself: choose INCY when adding the VM, and VPNer installs it (a pinned version checked by SHA-256), lets it create its tunnel without a password prompt, starts it with the VM in tunnel mode and connects it. The VM is named with the device name you enter, so it shows up under that name in your subscription's list of devices. A subscription link entered in VPNer is passed to the program once over VPNer's own channel to the VM and is never written to the VM's setup disk.
