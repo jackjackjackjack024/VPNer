@@ -1673,6 +1673,7 @@ function renderConns() {
       if (v.ip) kv += `<span>${tr("ui.addressInVpn")}</span><span class="mono">${esc(v.ip)}</span>`;
       if (v.dns && v.dns.length) kv += `<span>${tr("ui.tunnelDns")}</span><span class="mono">${esc(v.dns.join(", "))}</span>`;
       if (v.state === "up" && v.since) kv += `<span>${tr("ui.connected")}</span><span>${ago(v.since)}</span>`;
+      if (c.type === "hyperv" && (c.params || {}).deviceName) kv += `<span>${tr("ui.vmDevice")}</span><span class="mono">${esc(c.params.deviceName)}</span>`;
       if (v.vmPassword) kv += `<span>${tr("ui.passwordInVm")}</span><span class="mono" title="${tr("ui.userVpner")}">${esc(v.vmPassword)}</span>`;
       if (v.localProxy) kv += `<span>${tr("ui.localProxy")}</span><span class="mono" title="${tr("ui.httpSocks5WithoutPasswordFor")}">127.0.0.1:${v.localProxy}</span>`;
       return `<div class="card cc ${c.enabled ? "" : "off"}" style="--cc: var(--conn-${c.id})">

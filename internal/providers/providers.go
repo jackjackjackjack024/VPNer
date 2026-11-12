@@ -241,4 +241,5 @@ type VMSpec struct {
 	WANMode  string `json:"wanMode"` // external|nat
 	DNS      []string
 	App      string // VPN program VPNer installs and sets up in the VM ("" = the user does)
+	Hostname string // computer name of the VM ("" = VPNer's own); the device name a VPN program reports
 }

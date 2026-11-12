@@ -80,6 +80,8 @@ with open(tmp, "w") as f:
     json.dump(d, f, indent=2)
 os.replace(tmp, p)
 EOF
+# INCY names the device after the computer: the name chosen in VPNer.
+export HOSTNAME="$(hostname)"
 pgrep -u "$(id -u)" -f /opt/incy/ >/dev/null || "$BIN" >/dev/null 2>&1 &
 while :; do
   if [ -s "$SUB" ]; then

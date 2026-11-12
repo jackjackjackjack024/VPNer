@@ -133,7 +133,7 @@ func (a *App) vmConnect(id string, p VMRuntime) error {
 		dir := a.vmDir(id)
 		seed := filepath.Join(dir, "seed-src")
 		err = hyperv.WriteSeed(seed, hyperv.SeedConfig{
-			ID: id + "-" + randHex(3), Hostname: "vpner-" + id, LANIP: c.P("lanIp"),
+			ID: id + "-" + randHex(3), Hostname: vmHostname(id, spec), LANIP: c.P("lanIp"),
 			WANMac: hyperv.MACColon(c.P("wanMac")), LANMac: hyperv.MACColon(c.P("lanMac")),
 			GatewayUser: "vpner", GatewayPass: c.S("gwPass"), ConsolePass: c.P("consolePassword"),
 			Desktop: spec.Desktop, FallbackDNS: spec.DNS, Agent: agent, App: spec.App,
@@ -333,6 +333,15 @@ const (
 	vmAppFile = "app"
 	vmSubSent = "subscription.sent"
 )
+
+// vmHostname is the computer name of a new VM: the device name the user
+// chose, or VPNer's own.
+func vmHostname(id string, spec *providers.VMSpec) string {
+	if spec.Hostname != "" {
+		return spec.Hostname
+	}
+	return "vpner-" + id
+}
 
 // vmApp returns the program VPNer set up in the VM of a connection.
 func (a *App) vmApp(id string) string {
