@@ -6,6 +6,12 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Fixed
+
+- A virtual machine could not be created on newer Windows 11 builds: Hyper-V stopped with "Virtual hard disk files must be uncompressed and unencrypted and must not be sparse (0xC03A001A)". VPNer wrote the Debian image as a sparse file to save space; now it writes a plain file, and an image left by an earlier version is turned into one by itself the next time a VM is created, without downloading it again.
+- Clicking "Connect" several times while VPNer was still starting (for example, while the routing engine was downloading) created several virtual machines. Now a connection starts only once at a time, and its card shows at once that it is waiting for routing to turn on.
+- "VM window" seemed to do nothing: the window opened behind the other windows, and every click opened one more, which then asked to disconnect "another user". Now an open window of the VM is brought to the front, and a new one comes to the front once it appears.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added
