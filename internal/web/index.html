@@ -285,6 +285,12 @@ details > summary { cursor: pointer; color: var(--muted); margin: 6px 0 12px; us
 .protect .y { color: var(--ok); font-weight: 700; } .protect .n { color: var(--warn); font-weight: 700; }
 .toast { position: fixed; right: 20px; bottom: 20px; background: var(--text); color: var(--bg); padding: 10px 16px; border-radius: var(--radius); z-index: 100; max-width: 460px; box-shadow: 0 6px 24px rgba(0,0,0,.3); white-space: pre-wrap; }
 .toast.bad { background: var(--bad); color: #fff; }
+/* device-limit notice: stays after an action until it is closed */
+.device-notice { position: fixed; left: 20px; bottom: 20px; z-index: 101; max-width: 480px; max-height: 60vh; overflow: auto; background: var(--panel); border-radius: var(--radius); box-shadow: 0 6px 24px rgba(0,0,0,.3); }
+.device-notice .banner { margin: 0; display: block; }
+.device-notice ul { margin: 6px 0 0; padding-left: 18px; }
+.device-notice .icon-btn { float: right; margin: -4px -6px 0 8px; color: inherit; }
+@media (max-width: 560px) { .device-notice { left: 16px; right: 16px; max-width: none; } }
 .tabs-inline { display: flex; gap: 6px; margin-bottom: 12px; }
 .burger { display: none; }
 .scrim { display: none; }
@@ -1710,6 +1716,8 @@ async function toggleConn(id) {
   const c = structuredClone(S.cfg.connections.find(x => x.id === id));
   c.enabled = !c.enabled; delete c.secretSet;
   await act(() => api("POST", "/api/connections", c)); await loadConfig(); render();
+  // turned on, it is used again: a login, a VM, a key or an account
+  if (c.enabled) deviceNotice(c.type === "chain" ? chainDeviceLines(hopsOf(c)) : deviceLines(connDevices([c]), DEVICE_HERE));
 }
 async function delConn(id) {
   const c = S.cfg.connections.find(x => x.id === id);
@@ -1881,6 +1889,7 @@ async function importFlow(src) {
     const r = await act(() => api("POST", "/api/import", src));
     const back = takeChainReturn();
     await loadConfig(); closeModal(); render(); toast(tr("ui.connectionAdded"));
+    deviceNotice(deviceLines(connDevices((r.ids || []).map(connById)), DEVICE_HERE));
     if (back) return resumeChain(back, r.ids[0]);
     return editConn(r.ids[0]);
   }
@@ -1901,7 +1910,7 @@ function showImportSummary(src, prev) {
       ${hasRules ? sw("io-replace", false, tr("ui.replaceMyRules"), tr("ui.insteadOfAddingReplaceCurrent")) : ""}
       ${prev.hasFinal ? sw("io-final", prev.kind === "profile", tr("ui.defaultRuleFromFile"), tr("ui.whereTrafficThatMatchedNo")) : ""}
       ${prev.hasSettings ? sw("io-settings", false, tr("ui.settingsFromProfile"), tr("ui.dnsKillSwitchQuicAnd")) : ""}
-      ${(prev.devices || []).length ? `<div class="banner warn" style="margin:6px 0 0;display:block">${esc(tr("ui.import.newDevices", prev.devices.join(", ")))}</div>` : ""}
+      ${deviceBanner(deviceLines(prev.devices, DEVICE_HERE), "margin:6px 0 0")}
       ${(prev.notes || []).length ? `<div class="banner warn" style="margin:6px 0 0;display:block"><b>${tr("ui.pleaseNote")}</b><ul style="margin:6px 0 0;padding-left:18px">${prev.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}
     </div>
     <footer><button class="btn" onclick="closeModal()">${tr("ui.cancel")}</button><button class="btn primary" id="io-go">${tr("ui.import")}</button></footer>`, { sticky: true });
@@ -1912,19 +1921,21 @@ function showImportSummary(src, prev) {
     const r = await act(() => api("POST", "/api/import", { ...src, ...opt }));
     S.rulesDirty = false; await loadConfig(); closeModal(); render();
     toast(tr("ui.import.added", (r.ids || []).length) + (opt.rules ? tr("ui.import.addedRules", prev.rules) : ""));
+    deviceNotice(deviceLines(connDevices((r.ids || []).map(connById)), DEVICE_HERE));
   };
 }
 
 async function importFiles(files) {
   if (!files.length) return;
   if (files.length === 1) return importFlow({ filename: files[0].name, data: await files[0].text() });
-  let ok = 0; const errs = [];
+  const ids = []; const errs = [];
   for (const f of files) {
-    try { const r = await api("POST", "/api/import", { filename: f.name, data: await f.text(), rules: true }); ok += (r.ids || []).length; }
+    try { const r = await api("POST", "/api/import", { filename: f.name, data: await f.text(), rules: true }); ids.push(...(r.ids || [])); }
     catch (e) { errs.push(`${f.name}: ${e.message}`); }
   }
   await loadConfig(); closeModal(); render();
-  toast(tr("ui.import.added", ok) + (errs.length ? "\n" + tr("ui.import.failed") + "\n" + errs.join("\n") : ""), errs.length > 0);
+  toast(tr("ui.import.added", ids.length) + (errs.length ? "\n" + tr("ui.import.failed") + "\n" + errs.join("\n") : ""), errs.length > 0);
+  deviceNotice(deviceLines(connDevices(ids.map(connById)), DEVICE_HERE));
 }
 
 let ifaceCache = null;
@@ -1948,12 +1959,16 @@ async function editConn(id, type) {
   // A VM with a program already is one device of its subscription; a new one
   // would be another. It can serve a chain and rules at the same time.
   const otherVMs = c.type === "hyperv" && !c.id ? (S.cfg.connections || []).filter(x => x.type === "hyperv" && (x.params || {}).app).map(x => x.name) : [];
+  // a new connection: what it can take in a device limit, with the form's defaults
+  const defaults = Object.fromEntries(p.fields.filter(f => f.default !== undefined && f.default !== "").map(f => [f.key, f.default]));
+  const newDevice = c.id ? "" : deviceBanner(deviceLines(connDevices([{ ...c, name: p.title, params: { ...defaults, ...c.params } }]), DEVICE_HERE), "margin:0 0 12px");
   const basic = p.fields.filter(f => !f.advanced).map(fieldHTML).join("");
   const adv = p.fields.filter(f => f.advanced).map(fieldHTML).join("");
   const m = modal(`<header><h3>${id ? tr("ui.edit") : tr("ui.new")}: ${esc(p.title)}</h3><span class="badge ${RUNTIME[p.runtime][0]}">${RUNTIME[p.runtime][1]}</span><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
     <div class="body">
       <p class="help" style="color:var(--muted);margin-top:0">${esc(p.description)}</p>
       ${otherVMs.length ? `<div class="banner warn" style="display:block;margin:0 0 12px">${esc(tr("ui.vm.alreadyDevice", otherVMs.join(", ")))}</div>` : ""}
+      ${newDevice}
       <div class="field"><span>${tr("ui.name")}</span><input type="text" id="f-name" value="${esc(c.name)}" placeholder="${tr("ui.forExampleWorkAmneziaNl")}"></div>
       ${basic}
       ${adv ? `<details><summary>${tr("ui.advanced")}</summary>${adv}</details>` : ""}
@@ -1974,9 +1989,65 @@ async function editConn(id, type) {
     const r = await act(() => api("POST", "/api/connections", out), tr("ui.saved"));
     const back = !c.id ? takeChainReturn() : null;
     closeModal(); await loadConfig(); render();
+    if (!c.id) deviceNotice(deviceLines(connDevices([connById(r.id) || out]), DEVICE_HERE));
     if (back) resumeChain(back, r.id);
   };
   setTimeout(() => $("#f-name", m).focus(), 50);
+}
+
+// ---------- device limits ----------
+// Many VPN services limit how many devices or simultaneous connections one
+// subscription, account or key may use. deviceKind mirrors
+// providers.DeviceKind. Every action that can take such a place warns about
+// it in its dialog before, and with deviceNotice after it is done.
+function deviceKind(c) {
+  if (!c) return "";
+  switch (c.type) {
+    case "hyperv": return (c.params || {}).app ? "vm-app" : "vm";
+    case "openconnect": case "openvpn": return "login";
+    case "wireguard": return "key";
+    case "amnezia-server": return "user";
+    case "link": case "mihomo": return "account";
+  }
+  return ""; // chains (their hops count), proxies, interfaces
+}
+// on this computer (adding, importing) and on another one (exporting)
+const DEVICE_HERE = { "vm-app": "ui.device.here.vmApp", vm: "ui.device.here.vm", login: "ui.device.here.login", key: "ui.device.here.key", user: "ui.device.here.user", account: "ui.device.here.account" };
+const DEVICE_AWAY = { "vm-app": "ui.device.away.vmApp", vm: "ui.device.away.vm", login: "ui.device.away.login", key: "ui.device.away.key", user: "ui.device.away.user", account: "ui.device.away.account" };
+const connDevices = conns => conns.filter(Boolean).map(c => ({ name: c.name, kind: deviceKind(c) })).filter(x => x.kind);
+const shortList = a => a.length > 4 ? a.slice(0, 4).join(", ") + tr("ui.device.more", a.length - 4) : a.join(", ");
+// deviceLines: one line per kind, with the names of its connections.
+function deviceLines(items, where) {
+  const by = {};
+  (items || []).forEach(x => { if (where[x.kind]) (by[x.kind] = by[x.kind] || []).push(x.name); });
+  return Object.keys(where).filter(k => by[k]).map(k => tr(where[k], shortList(by[k])));
+}
+const deviceList = lines => `<ul style="margin:6px 0 0;padding-left:18px">${lines.map(l => `<li>${esc(l)}</li>`).join("")}</ul>`;
+const deviceBanner = (lines, style) => lines.length ? `<div class="banner warn" style="display:block;${style || ""}"><b>${tr("ui.device.lead")}</b>${deviceList(lines)}</div>` : "";
+// deviceNotice stays on screen after an action until it is closed, so the
+// warning is not lost among dialogs and short toasts.
+function deviceNotice(lines) {
+  const old = $("#device-notice"); if (old) old.remove();
+  if (!lines.length) return;
+  const el = document.createElement("div");
+  el.id = "device-notice"; el.className = "device-notice"; el.setAttribute("role", "status");
+  el.innerHTML = `<div class="banner warn"><button class="icon-btn" title="${tr("ui.close")}" aria-label="${tr("ui.close")}">${ICON.close}</button><b>${tr("ui.device.after")}</b><br>${tr("ui.device.lead")}${deviceList(lines)}</div>`;
+  $("button", el).onclick = () => el.remove();
+  document.body.appendChild(el);
+}
+// chainDeviceLines: hops after the first are copies that reach their server
+// through the previous hop; skip lists hops that already were such copies.
+function chainDeviceLines(hops, skip) {
+  const out = [];
+  hops.forEach((id, i) => {
+    const c = connById(id);
+    if (!c || i === 0 || (skip && skip.has(id))) return;
+    const k = deviceKind(c);
+    if (k === "account") out.push(tr("ui.device.chain.account", c.name));
+    if (k === "user") out.push(tr("ui.device.chain.user", c.name));
+    if (k === "key") out.push(tr("ui.device.chain.key", c.name));
+  });
+  return out;
 }
 
 // ---------- chains ----------
@@ -2049,6 +2120,7 @@ function editChain(id, draft) {
           ${d.hops.length && others.length > canAdd.length ? `<span class="help">${tr("ui.chain.followHint")}</span>` : ""}
         </div>
         ${iss.all.length ? `<div class="banner warn" style="display:block;margin:6px 0 10px"><ul style="margin:0;padding-left:18px">${iss.all.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${deviceBanner(chainDeviceLines(d.hops), "margin:6px 0 10px")}
         ${iss.info.map(x => `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${esc(x)}</p>`).join("")}
         <label class="check"><input type="checkbox" class="switch" id="ch-enabled" ${d.enabled ? "checked" : ""}><span>${tr("ui.on")}</span></label>
       </div>
@@ -2065,7 +2137,10 @@ function editChain(id, draft) {
       if (!d.name) return toast(tr("ui.enterName"), true);
       const out = { id: d.id, name: d.name, type: "chain", enabled: d.enabled, autostart: false, params: { hops: d.hops.join(",") }, secrets: {} };
       await act(() => api("POST", "/api/connections", out), tr("ui.saved"));
+      // only hops that became copies with this save take new places
+      const were = new Set(c ? hopsOf(c).slice(1) : []);
       closeModal(); await loadConfig(); render();
+      deviceNotice(chainDeviceLines(d.hops, were));
     };
     return m;
   };
@@ -2577,13 +2652,14 @@ async function exportProfile() {
     </div>
     <footer><button class="btn" onclick="closeModal()">${tr("ui.close")}</button><button class="btn" id="exm-save">${tr("ui.export.saveFile")}</button><button class="btn primary" id="exm-copy">${tr("ui.copy")}</button></footer>`, { wide: true });
   const text = $("#exm-text", m), copy = $("#exm-copy", m), save = $("#exm-save", m);
+  // what the profile takes in device limits once it is used on another computer
+  const awayLines = deviceLines(connDevices(S.cfg.connections || []), DEVICE_AWAY);
   const load = async () => {
     const my = ++seq;
-    const devices = (S.cfg.connections || []).filter(c => c.type === "hyperv" && (c.params || {}).app).map(c => c.name);
     $("#exm-warn", m).innerHTML = (secrets
       ? `<div class="banner bad" style="margin:0 0 10px">${tr("ui.export.secretsWarning")}</div>`
       : `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${tr("ui.export.noSecrets")}</p>`)
-      + (devices.length ? `<div class="banner warn" style="margin:0 0 10px;display:block">${esc(tr("ui.export.devices", devices.join(", ")))}</div>` : "");
+      + deviceBanner(awayLines, "margin:0 0 10px");
     text.value = ""; copy.disabled = save.disabled = true;
     try {
       const r = await api("POST", "/api/export", { secrets });
@@ -2598,10 +2674,10 @@ async function exportProfile() {
   };
   text.onfocus = () => text.select();
   copy.onclick = () => navigator.clipboard.writeText(text.value)
-    .then(() => toast(tr(secrets ? "ui.export.copiedSecrets" : "ui.copied")), e => toast(e.message, true));
+    .then(() => { toast(tr(secrets ? "ui.export.copiedSecrets" : "ui.copied")); deviceNotice(awayLines); }, e => toast(e.message, true));
   save.onclick = async () => {
     const r = await act(() => api("POST", "/api/export/save", { secrets })).catch(() => null);
-    if (r && r.path) toast(tr("ui.settings.profileSaved", r.path));
+    if (r && r.path) { toast(tr("ui.settings.profileSaved", r.path)); deviceNotice(awayLines); }
   };
   load();
 }

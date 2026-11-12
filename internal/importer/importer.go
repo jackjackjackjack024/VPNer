@@ -53,17 +53,27 @@ type Summary struct {
 	HasFinal    bool     `json:"hasFinal"`
 	HasSettings bool     `json:"hasSettings"`
 	Notes       []string `json:"notes,omitempty"`
-	// Devices: VMs with a VPN program VPNer sets up. Imported, each is a new
-	// VM, so the program counts as a new device of its subscription.
-	Devices []string `json:"devices,omitempty"`
+	// Devices: the connections that can take a place in a VPN service's
+	// device limit once they are used on this computer (a VM with a program
+	// is created anew and is a new device of its subscription; a key, a
+	// login or an account is used from one more place).
+	Devices []Device `json:"devices,omitempty"`
+}
+
+// Device is a connection that can take a place in a device limit and how
+// (providers.DeviceKind).
+type Device struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
 }
 
 func (r *Result) Summary() Summary {
 	s := Summary{Kind: r.Kind, Rules: len(r.Rules), HasFinal: r.FinalTarget != "", HasSettings: r.Settings != nil || r.DNS != nil, Notes: r.Notes}
-	for _, c := range r.Connections {
+	for i := range r.Connections {
+		c := &r.Connections[i]
 		s.Connections = append(s.Connections, c.Name)
-		if c.Type == "hyperv" && c.P("app") != "" {
-			s.Devices = append(s.Devices, c.Name)
+		if k := providers.DeviceKind(c); k != providers.DeviceNone {
+			s.Devices = append(s.Devices, Device{Name: c.Name, Kind: k})
 		}
 	}
 	for _, rl := range r.Rules {

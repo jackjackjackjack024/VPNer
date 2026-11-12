@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"vpner/internal/config"
+	"vpner/internal/providers"
 )
 
 const links = `# мои серверы
@@ -224,7 +225,7 @@ func TestProfileVMApp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if d := res.Summary().Devices; len(d) != 1 || d[0] != "VM" {
+		if d := res.Summary().Devices; len(d) != 1 || d[0] != (Device{Name: "VM", Kind: providers.DeviceVMApp}) {
 			t.Errorf("the import must warn about the new device: %v", d)
 		}
 		c := res.Connections[0]
