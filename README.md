@@ -136,7 +136,7 @@ The script downloads a pinned Go toolchain into `.tools`, builds the Linux agent
 **programmer2005** — just a student who needed several VPNs at once for work: a few corporate ones plus a personal one. They kept conflicting with each other, and that is how VPNer appeared.
 
 - Telegram: [@programmer2005](https://t.me/programmer2005)
-- GitHub: [progr4mmer2005](https://github.com/progr4mmer2005)
+- GitHub: [jackjackjackjack024](https://github.com/jackjackjackjack024)
 
 ## Support the project
 
