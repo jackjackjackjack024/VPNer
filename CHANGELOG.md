@@ -1,8 +1,15 @@
 # Changelog
 
+**English** · [Русский](CHANGELOG.ru.md)
+
 All notable changes are listed here. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
+
+### Added
+
+- A virtual machine can set up its VPN program by itself: choose INCY when adding the VM, and VPNer installs it (a pinned version checked by SHA-256), lets it create its tunnel without a password prompt, starts it with the VM in tunnel mode and connects it. The VM is named with the device name you enter, so it shows up under that name in your subscription's list of devices. A subscription link entered in VPNer is passed to the program once over VPNer's own channel to the VM and is never written to the VM's setup disk.
+- Device-limit warnings. Many VPN services limit how many devices or simultaneous connections one subscription, account or key may use, so VPNer now says what can take such a place: before an action in its dialog, and right after it in a notice that stays until you close it. This covers adding and importing connections (also a subscription or a profile), exporting a profile, saving a chain and turning a connection on. A VM with a VPN program is a new device of its subscription; a corporate VPN login is one more session; a WireGuard/AmneziaWG key is one device and cannot work in two places at once; an Amnezia server gets one more user; a subscription or share-link account may count this computer, or a chain's copy that comes from another address, as one more device.
 
 ## [0.2.0] - 2026-11-12
 

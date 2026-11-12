@@ -31,7 +31,8 @@ If a VPN goes down, its rules **block** traffic instead of letting it out direct
 - **Many VPN types:**
   - **built in:** WireGuard, AmneziaWG (including 2.0 and the full access key of your own Amnezia server), VLESS/Reality, VMess, Trojan, Shadowsocks, Hysteria2, TUIC;
   - **in isolated WSL containers:** Cisco AnyConnect / Secure Client (OpenConnect), GlobalProtect, Fortinet, Pulse/Ivanti, F5, OpenVPN;
-  - **in a Hyper-V virtual machine:** any original VPN app (AmneziaVPN, Cisco Secure Client, provider clients).
+  - **in a Hyper-V virtual machine:** any original VPN app (AmneziaVPN, Cisco Secure Client, provider clients); INCY is installed and connected by VPNer itself.
+- **Device limits:** VPNer warns before and after every action that can take a place in a service's limit of devices or connections (a new VM, a login, a key, a subscription, a profile moved to another computer).
 - **Chains:** several connections one after another — traffic enters the first and leaves through the last; each connection also stays usable on its own.
 - **Rules:** by program, program path, domain, domain suffix, keyword, regex, IP/subnet, site category (geosite), IP country, port and protocol. Ready-made sets of popular services, drag & drop ordering, a "where will it go?" check.
 - **DNS:** DoH, DoH3, DoT, DoQ, UDP/TCP and the system resolver; each server can go directly or **through any VPN**; per-domain DNS rules; FakeIP so that DNS never leaks.

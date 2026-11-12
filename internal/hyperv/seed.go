@@ -25,6 +25,7 @@ type SeedConfig struct {
 	Desktop     bool
 	FallbackDNS []string
 	Agent       []byte // vpner-agent linux binary
+	App         string // VPN program VPNer installs and sets up (AppIncy), "" for none
 }
 
 // killSwitchNFT confines the gateway user: it may only talk to the host on
@@ -126,6 +127,17 @@ ethernets:
 `
 	}
 
+	// The app is installed after the desktop: it needs it, and its session
+	// script waits until the app is there.
+	appFilesYAML, appCmds := "", ""
+	extra, cmds := appFiles(c.App)
+	for _, f := range extra {
+		appFilesYAML += fmt.Sprintf("  - path: %s\n    permissions: %q\n    content: |\n%s\n", f.Path, f.Mode, indent(f.Content, "      "))
+	}
+	for _, cmd := range cmds {
+		appCmds += "  - [sh, -c, " + yamlStr(cmd) + "]\n"
+	}
+
 	user := fmt.Sprintf(`#cloud-config
 hostname: %[1]s
 manage_etc_hosts: true
@@ -165,19 +177,19 @@ write_files:
     defer: true
     content: |
 %[6]s
-runcmd:
+%[8]sruncmd:
   - [sh, -c, "mkdir -p /mnt/seed && (mount -L CIDATA /mnt/seed || mount -L cidata /mnt/seed) && install -D -m 0755 /mnt/seed/vpner-agent /opt/vpner/vpner-agent && umount /mnt/seed"]
   - [sh, -c, "systemctl disable --now ssh ssh.socket 2>/dev/null || true"]
   - [sh, -c, "for i in 1 2 3 4 5; do apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nftables locales && break; sleep 10; done"]
   - [sh, -c, "mkdir -p /srv/vpner-share && chown vpnergw:vpner /srv/vpner-share && chmod 2775 /srv/vpner-share"]
   - [sh, -c, "systemctl daemon-reload && systemctl enable --now vpner-gateway"]
   - [sh, -c, "sed -i 's/^# *ru_RU.UTF-8/ru_RU.UTF-8/' /etc/locale.gen && locale-gen && update-locale LANG=ru_RU.UTF-8"]
-%[7]s`, c.Hostname, yamlStr(c.ConsolePass),
+%[7]s%[9]s`, c.Hostname, yamlStr(c.ConsolePass),
 		indent(fmt.Sprintf(killSwitchNFT, LANHost), "      "),
 		indent(gatewayUnit, "      "),
 		indent(readme(), "      "),
 		indent(string(gw), "      "),
-		desktopCmds)
+		desktopCmds, appFilesYAML, appCmds)
 
 	files := map[string][]byte{
 		"meta-data":      []byte(meta),
