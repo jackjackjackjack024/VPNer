@@ -19,9 +19,10 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"syscall"
+
+	"vpner/internal/winutil"
 )
 
 const (
@@ -222,6 +223,5 @@ func MACColon(m string) string {
 	return strings.Join(parts, ":")
 }
 
-func OpenConsole(name string) error {
-	return exec.Command(filepath.Join(os.Getenv("WINDIR"), "System32", "vmconnect.exe"), "localhost", name).Start()
-}
+// OpenConsole shows the VM window, bringing an open one to the front.
+func OpenConsole(name string) error { return winutil.OpenVMConsole(name) }
