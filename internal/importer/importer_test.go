@@ -224,6 +224,9 @@ func TestProfileVMApp(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
+		if d := res.Summary().Devices; len(d) != 1 || d[0] != "VM" {
+			t.Errorf("the import must warn about the new device: %v", d)
+		}
 		c := res.Connections[0]
 		if c.P("app") != "incy" {
 			t.Errorf("app lost: %v", c.Params)

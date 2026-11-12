@@ -1901,6 +1901,7 @@ function showImportSummary(src, prev) {
       ${hasRules ? sw("io-replace", false, tr("ui.replaceMyRules"), tr("ui.insteadOfAddingReplaceCurrent")) : ""}
       ${prev.hasFinal ? sw("io-final", prev.kind === "profile", tr("ui.defaultRuleFromFile"), tr("ui.whereTrafficThatMatchedNo")) : ""}
       ${prev.hasSettings ? sw("io-settings", false, tr("ui.settingsFromProfile"), tr("ui.dnsKillSwitchQuicAnd")) : ""}
+      ${(prev.devices || []).length ? `<div class="banner warn" style="margin:6px 0 0;display:block">${esc(tr("ui.import.newDevices", prev.devices.join(", ")))}</div>` : ""}
       ${(prev.notes || []).length ? `<div class="banner warn" style="margin:6px 0 0;display:block"><b>${tr("ui.pleaseNote")}</b><ul style="margin:6px 0 0;padding-left:18px">${prev.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}
     </div>
     <footer><button class="btn" onclick="closeModal()">${tr("ui.cancel")}</button><button class="btn primary" id="io-go">${tr("ui.import")}</button></footer>`, { sticky: true });
@@ -1944,11 +1945,15 @@ async function editConn(id, type) {
     else input = `<input type="${f.secret ? "password" : f.kind === "number" ? "number" : "text"}" data-k="${f.key}" ${f.secret ? 'data-secret="1" autocomplete="new-password"' : ""} value="${esc(val)}" placeholder="${esc(ph)}" spellcheck="false">`;
     return `<div class="field"><span>${esc(f.label)}${f.required ? " *" : ""}</span>${input}${f.help ? `<span class="help">${esc(f.help)}</span>` : ""}</div>`;
   };
+  // A VM with a program already is one device of its subscription; a new one
+  // would be another. It can serve a chain and rules at the same time.
+  const otherVMs = c.type === "hyperv" && !c.id ? (S.cfg.connections || []).filter(x => x.type === "hyperv" && (x.params || {}).app).map(x => x.name) : [];
   const basic = p.fields.filter(f => !f.advanced).map(fieldHTML).join("");
   const adv = p.fields.filter(f => f.advanced).map(fieldHTML).join("");
   const m = modal(`<header><h3>${id ? tr("ui.edit") : tr("ui.new")}: ${esc(p.title)}</h3><span class="badge ${RUNTIME[p.runtime][0]}">${RUNTIME[p.runtime][1]}</span><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
     <div class="body">
       <p class="help" style="color:var(--muted);margin-top:0">${esc(p.description)}</p>
+      ${otherVMs.length ? `<div class="banner warn" style="display:block;margin:0 0 12px">${esc(tr("ui.vm.alreadyDevice", otherVMs.join(", ")))}</div>` : ""}
       <div class="field"><span>${tr("ui.name")}</span><input type="text" id="f-name" value="${esc(c.name)}" placeholder="${tr("ui.forExampleWorkAmneziaNl")}"></div>
       ${basic}
       ${adv ? `<details><summary>${tr("ui.advanced")}</summary>${adv}</details>` : ""}
@@ -2001,6 +2006,7 @@ function chainIssues(d) {
     const c = connById(id);
     if (!c) { hop[id] = tr("ui.chain.hopGone"); return; }
     if (i === 0 && !c.enabled) all.push(tr("ui.chain.firstOff", c.name));
+    if (i === 0) info.push(tr("ui.chain.sharedFirst", c.name));
     if (i > 0 && !providerOf(c.type).follow) hop[id] = tr("ui.chain.onlyFirst");
     if (i > 0 && TUNNEL_TYPES.includes(c.type) && c.enabled) all.push(tr("ui.chain.keyTwice", c.name));
     if (i > 0 && c.type === "amnezia-server") info.push(tr("ui.chain.ownUser", c.name, `${(c.params || {}).clientName || "VPNer"} (${d.name || tr("ui.chain.unnamed")})`));
@@ -2573,9 +2579,11 @@ async function exportProfile() {
   const text = $("#exm-text", m), copy = $("#exm-copy", m), save = $("#exm-save", m);
   const load = async () => {
     const my = ++seq;
-    $("#exm-warn", m).innerHTML = secrets
+    const devices = (S.cfg.connections || []).filter(c => c.type === "hyperv" && (c.params || {}).app).map(c => c.name);
+    $("#exm-warn", m).innerHTML = (secrets
       ? `<div class="banner bad" style="margin:0 0 10px">${tr("ui.export.secretsWarning")}</div>`
-      : `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${tr("ui.export.noSecrets")}</p>`;
+      : `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${tr("ui.export.noSecrets")}</p>`)
+      + (devices.length ? `<div class="banner warn" style="margin:0 0 10px;display:block">${esc(tr("ui.export.devices", devices.join(", ")))}</div>` : "");
     text.value = ""; copy.disabled = save.disabled = true;
     try {
       const r = await api("POST", "/api/export", { secrets });

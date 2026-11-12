@@ -53,12 +53,18 @@ type Summary struct {
 	HasFinal    bool     `json:"hasFinal"`
 	HasSettings bool     `json:"hasSettings"`
 	Notes       []string `json:"notes,omitempty"`
+	// Devices: VMs with a VPN program VPNer sets up. Imported, each is a new
+	// VM, so the program counts as a new device of its subscription.
+	Devices []string `json:"devices,omitempty"`
 }
 
 func (r *Result) Summary() Summary {
 	s := Summary{Kind: r.Kind, Rules: len(r.Rules), HasFinal: r.FinalTarget != "", HasSettings: r.Settings != nil || r.DNS != nil, Notes: r.Notes}
 	for _, c := range r.Connections {
 		s.Connections = append(s.Connections, c.Name)
+		if c.Type == "hyperv" && c.P("app") != "" {
+			s.Devices = append(s.Devices, c.Name)
+		}
 	}
 	for _, rl := range r.Rules {
 		s.RuleValues += len(rl.Values)
