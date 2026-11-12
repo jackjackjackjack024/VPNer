@@ -215,6 +215,23 @@ func parseProfile(data string) (*Result, error) {
 			}
 		}
 		c.SetHops(hops)
+		// The chain's own server users are keyed by hop id as well.
+		secrets := map[string]string{}
+		for k, v := range c.Secrets {
+			keep := true
+			for _, pre := range []string{"hopConfig.", "hopClient."} {
+				if old, ok := strings.CutPrefix(k, pre); ok {
+					keep = false
+					if n, ok := idMap[old]; ok {
+						secrets[pre+n] = v
+					}
+				}
+			}
+			if keep {
+				secrets[k] = v
+			}
+		}
+		c.Secrets = secrets
 		if lost {
 			c.Enabled = false
 			res.Notes = append(res.Notes, fmt.Sprintf(i18n.T("importer.chainLostHop"), c.Name))

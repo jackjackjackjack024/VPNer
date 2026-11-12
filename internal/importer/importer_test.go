@@ -189,7 +189,8 @@ func TestProfileChain(t *testing.T) {
 	p := Profile{VPNer: ProfileVersion, Connections: []config.Connection{
 		{ID: "a", Name: "A", Type: "link", Enabled: true, Secrets: map[string]string{"link": "trojan://p@a.example.com:443#A"}},
 		{ID: "b", Name: "B", Type: "link", Enabled: true, Secrets: map[string]string{"link": "trojan://p@b.example.com:443#B"}},
-		{ID: "c", Name: "C", Type: config.TypeChain, Enabled: true, Params: map[string]string{"hops": "a,b"}},
+		{ID: "c", Name: "C", Type: config.TypeChain, Enabled: true, Params: map[string]string{"hops": "a,b"},
+			Secrets: map[string]string{"hopConfig.b": "conf", "hopClient.b": "id", "hopConfig.gone": "x"}},
 	}}
 	b, _ := json.Marshal(p)
 	res, err := Parse("profile.json", string(b))
@@ -199,5 +200,9 @@ func TestProfileChain(t *testing.T) {
 	ids := res.Connections[0].ID + "," + res.Connections[1].ID
 	if got := strings.Join(res.Connections[2].Hops(), ","); got != ids || !res.Connections[2].Enabled {
 		t.Errorf("hops = %q, want %q", got, ids)
+	}
+	ch, b2 := res.Connections[2], res.Connections[1].ID
+	if ch.S("hopConfig."+b2) != "conf" || ch.S("hopClient."+b2) != "id" || len(ch.Secrets) != 2 {
+		t.Errorf("chain users must follow the new hop ids: %v", ch.Secrets)
 	}
 }

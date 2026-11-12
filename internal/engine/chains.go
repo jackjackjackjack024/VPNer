@@ -64,8 +64,7 @@ func Chains(cfg *config.Config) []Chain {
 				ok = false
 				break
 			}
-			p, _ := providers.Get(hc.Type)
-			o, err := p.(providers.NativeProvider).Outbound(hc)
+			o, err := providers.HopOutbound(c, hc)
 			if err != nil {
 				ok = false
 				break

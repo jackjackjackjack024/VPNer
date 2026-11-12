@@ -251,6 +251,9 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 		if err := a.provisionAmnezia(&c); err != nil {
 			return "", err
 		}
+		if err := a.provisionChainKeys(&c, cfg); err != nil {
+			return "", err
+		}
 		cfg.Connections = append(cfg.Connections, c)
 	} else {
 		old := cfg.Conn(c.ID)
@@ -276,6 +279,9 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 		if err := a.provisionAmnezia(&c); err != nil {
 			return "", err
 		}
+		if err := a.provisionChainKeys(&c, cfg); err != nil {
+			return "", err
+		}
 		*old = c
 	}
 	if err := a.commit(cfg); err != nil {
@@ -293,10 +299,15 @@ func (a *App) DeleteConnection(id string) error {
 	cfg := a.Config()
 	var out []config.Connection
 	var name string
+	var deleted config.Connection
 	for _, c := range cfg.Connections {
 		if c.ID == id {
 			name = c.Name
+			deleted = c
 			go a.removeAmneziaClient(c)
+			if c.Type == config.TypeChain {
+				go a.removeChainClients(c, cfg.Clone())
+			}
 			continue
 		}
 		out = append(out, c)
@@ -321,6 +332,11 @@ func (a *App) DeleteConnection(id string) error {
 		}
 		ch.SetHops(keep)
 		ch.Enabled = false
+		if cid := ch.S(providers.ChainClientSecret(id)); cid != "" {
+			go a.removeChainClient(deleted, cid)
+		}
+		delete(ch.Secrets, providers.ChainClientSecret(id))
+		delete(ch.Secrets, providers.ChainKeySecret(id))
 		a.Log.Warnf("app", i18n.T("app.chainOffAfterHopDeleted"), ch.Name, name)
 	}
 	// Rules that pointed at it must not silently become direct: block instead.
@@ -977,7 +993,7 @@ func (a *App) chainProblemLocked(cfg *config.Config, c *config.Connection) strin
 	}
 	for _, h := range hops[1:] {
 		if hc := cfg.Conn(h); hc != nil {
-			if err := providers.Validate(hc); err != nil {
+			if _, err := providers.HopOutbound(c, hc); err != nil {
 				return fmt.Sprintf(i18n.T("app.chainHopBroken"), hc.Name, err)
 			}
 		}

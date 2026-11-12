@@ -47,6 +47,15 @@ func (a *App) ImportData(filename, data string, dry bool, opt ImportOptions) (*I
 	defer a.ops.Unlock()
 	cfg := a.Config()
 	cfg.Connections = append(cfg.Connections, res.Connections...)
+	// Chains whose own server users did not come with the profile (it was
+	// exported without secrets) get new ones.
+	for i := range cfg.Connections {
+		if c := &cfg.Connections[i]; c.Type == config.TypeChain && isNew(res.Connections, c.ID) {
+			if err := a.provisionChainKeys(c, cfg); err != nil {
+				return nil, err
+			}
+		}
+	}
 	for _, c := range res.Connections {
 		out.IDs = append(out.IDs, c.ID)
 	}
@@ -163,6 +172,15 @@ func IsSubscriptionLink(s string) bool {
 	}
 	// http://user:pass@host:port is a proxy link; subscriptions have a path
 	return u.User == nil && (strings.Trim(u.Path, "/") != "" || u.RawQuery != "")
+}
+
+func isNew(conns []config.Connection, id string) bool {
+	for _, c := range conns {
+		if c.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 var _ = config.TargetDirect

@@ -1978,7 +1978,9 @@ async function editConn(id, type) {
 // through it into the next and leaves through the last. The connections
 // stay usable on their own; WireGuard/AmneziaWG hops after the first run as
 // a copy, and one key cannot work in two places at once.
-const TUNNEL_TYPES = ["wireguard", "amnezia-server"];
+// A plain WireGuard/AmneziaWG config has one key; an Amnezia server
+// connection gets its own user on the server for each chain instead.
+const TUNNEL_TYPES = ["wireguard"];
 const connById = id => (S.cfg.connections || []).find(c => c.id === id);
 const hopsOf = c => String((c.params || {}).hops || "").split(",").map(x => x.trim()).filter(Boolean);
 function chainPath(c) {
@@ -1993,16 +1995,17 @@ function resumeChain(back, newId) {
 }
 // chainIssues lists what stops a draft chain from working, per hop and overall.
 function chainIssues(d) {
-  const hop = {}, all = [];
+  const hop = {}, all = [], info = [];
   d.hops.forEach((id, i) => {
     const c = connById(id);
     if (!c) { hop[id] = tr("ui.chain.hopGone"); return; }
     if (i === 0 && !c.enabled) all.push(tr("ui.chain.firstOff", c.name));
     if (i > 0 && !providerOf(c.type).follow) hop[id] = tr("ui.chain.onlyFirst");
     if (i > 0 && TUNNEL_TYPES.includes(c.type) && c.enabled) all.push(tr("ui.chain.keyTwice", c.name));
+    if (i > 0 && c.type === "amnezia-server") info.push(tr("ui.chain.ownUser", c.name, `${(c.params || {}).clientName || "VPNer"} (${d.name || tr("ui.chain.unnamed")})`));
   });
   if (d.hops.length < 2) all.unshift(tr("ui.chain.needTwo"));
-  return { hop, all };
+  return { hop, all, info };
 }
 function editChain(id, draft) {
   const c = id ? connById(id) : null;
@@ -2039,6 +2042,7 @@ function editChain(id, draft) {
           ${d.hops.length && others.length > canAdd.length ? `<span class="help">${tr("ui.chain.followHint")}</span>` : ""}
         </div>
         ${iss.all.length ? `<div class="banner warn" style="display:block;margin:6px 0 10px"><ul style="margin:0;padding-left:18px">${iss.all.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
+        ${iss.info.map(x => `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${esc(x)}</p>`).join("")}
         <label class="check"><input type="checkbox" class="switch" id="ch-enabled" ${d.enabled ? "checked" : ""}><span>${tr("ui.on")}</span></label>
       </div>
       <footer><button class="btn" onclick="closeModal()">${tr("ui.cancel")}</button><button class="btn primary" id="ch-save">${tr("ui.save")}</button></footer>`, { sticky: true, wide: true });
