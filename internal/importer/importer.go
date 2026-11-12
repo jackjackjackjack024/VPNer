@@ -198,6 +198,45 @@ func parseProfile(data string) (*Result, error) {
 		delete(c.Secrets, "gwPass")
 		res.Connections = append(res.Connections, c)
 	}
+	// Chains point at connections by id: map them to the new ids. A chain
+	// that lost a hop (its type is not supported here) stays off.
+	for i := range res.Connections {
+		c := &res.Connections[i]
+		if c.Type != config.TypeChain {
+			continue
+		}
+		var hops []string
+		lost := false
+		for _, h := range c.Hops() {
+			if n, ok := idMap[h]; ok {
+				hops = append(hops, n)
+			} else {
+				lost = true
+			}
+		}
+		c.SetHops(hops)
+		// The chain's own server users are keyed by hop id as well.
+		secrets := map[string]string{}
+		for k, v := range c.Secrets {
+			keep := true
+			for _, pre := range []string{"hopConfig.", "hopClient."} {
+				if old, ok := strings.CutPrefix(k, pre); ok {
+					keep = false
+					if n, ok := idMap[old]; ok {
+						secrets[pre+n] = v
+					}
+				}
+			}
+			if keep {
+				secrets[k] = v
+			}
+		}
+		c.Secrets = secrets
+		if lost {
+			c.Enabled = false
+			res.Notes = append(res.Notes, fmt.Sprintf(i18n.T("importer.chainLostHop"), c.Name))
+		}
+	}
 	mapTarget := func(t string) string {
 		if t == config.TargetDirect || t == config.TargetBlock {
 			return t
@@ -335,7 +374,8 @@ func parseClash(data string) (*Result, error) {
 		return nil, fmt.Errorf("YAML: %v", err)
 	}
 	res := &Result{Kind: "clash"}
-	byName := map[string]string{} // proxy name -> connection id
+	byName := map[string]string{}  // proxy name -> connection id
+	dialers := map[string]string{} // proxy name -> name of its dialer-proxy
 	names := map[string]int{}
 	for _, p := range cc.Proxies {
 		name, _ := p["name"].(string)
@@ -349,6 +389,10 @@ func parseClash(data string) (*Result, error) {
 				body[k] = v
 			}
 		}
+		// A proxy that dials through another one becomes a VPNer chain
+		// below; the copy of the proxy itself goes directly.
+		dialer, _ := body["dialer-proxy"].(string)
+		delete(body, "dialer-proxy")
 		y, err := yaml.Marshal(body)
 		if err != nil {
 			continue
@@ -360,10 +404,47 @@ func parseClash(data string) (*Result, error) {
 			continue
 		}
 		byName[name] = c.ID
+		if dialer != "" {
+			dialers[name] = dialer
+		}
 		res.Connections = append(res.Connections, c)
 	}
 	if len(res.Connections) == 0 {
 		return nil, errors.New(i18n.T("importer.configHasNoSupportedProxies"))
+	}
+	// Proxies with dialer-proxy: a chain from the first dialer to the proxy,
+	// and rules that pointed at the proxy go to the chain.
+	chainOf := map[string]string{}
+	chained := make([]string, 0, len(dialers))
+	for n := range dialers {
+		chained = append(chained, n)
+	}
+	sort.Strings(chained)
+	for _, name := range chained {
+		hops := []string{byName[name]}
+		seen := map[string]bool{name: true}
+		ok := true
+		for cur := dialers[name]; cur != ""; cur = dialers[cur] {
+			id, found := byName[cur]
+			if !found || seen[cur] {
+				ok = false
+				break
+			}
+			seen[cur] = true
+			hops = append([]string{id}, hops...)
+		}
+		if !ok {
+			res.Notes = append(res.Notes, fmt.Sprintf(i18n.T("importer.dialerProxyNotFound"), name, dialers[name]))
+			continue
+		}
+		ch := config.Connection{ID: config.NewID("c"), Name: uniqueName(names, fmt.Sprintf(i18n.T("importer.chainName"), name)),
+			Type: config.TypeChain, Enabled: true, Params: map[string]string{}, Secrets: map[string]string{}}
+		ch.SetHops(hops)
+		res.Connections = append(res.Connections, ch)
+		chainOf[name] = ch.ID
+	}
+	for name, id := range chainOf {
+		byName[name] = id
 	}
 	// groups: resolve to their first concrete member (VPNer routes rules to
 	// one connection; failover groups would hide outages from the user)

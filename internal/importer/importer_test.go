@@ -155,3 +155,54 @@ func TestProfileAppearance(t *testing.T) {
 		t.Errorf("appearance not carried over or not remapped: %s", res.Appearance)
 	}
 }
+
+// A proxy with dialer-proxy becomes a chain, and its rules go to the chain.
+func TestClashDialerProxy(t *testing.T) {
+	const y = `proxies:
+  - {name: Entry, type: trojan, server: a.example.com, port: 443, password: p}
+  - {name: Exit, type: trojan, server: b.example.com, port: 443, password: p, dialer-proxy: Entry}
+rules:
+  - DOMAIN-SUFFIX,example.org,Exit
+  - MATCH,DIRECT
+`
+	res, err := Parse("config.yaml", y)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Connections) != 3 {
+		t.Fatalf("conns = %d", len(res.Connections))
+	}
+	entry, exit, ch := res.Connections[0], res.Connections[1], res.Connections[2]
+	if strings.Contains(exit.S("yaml"), "dialer-proxy") {
+		t.Errorf("copy of the proxy must not keep dialer-proxy: %s", exit.S("yaml"))
+	}
+	if ch.Type != config.TypeChain || strings.Join(ch.Hops(), ",") != entry.ID+","+exit.ID {
+		t.Fatalf("chain = %+v", ch)
+	}
+	if res.Rules[0].Target != ch.ID {
+		t.Errorf("rule must go to the chain: %+v", res.Rules[0])
+	}
+}
+
+// Chains in a profile point at the new ids of their connections.
+func TestProfileChain(t *testing.T) {
+	p := Profile{VPNer: ProfileVersion, Connections: []config.Connection{
+		{ID: "a", Name: "A", Type: "link", Enabled: true, Secrets: map[string]string{"link": "trojan://p@a.example.com:443#A"}},
+		{ID: "b", Name: "B", Type: "link", Enabled: true, Secrets: map[string]string{"link": "trojan://p@b.example.com:443#B"}},
+		{ID: "c", Name: "C", Type: config.TypeChain, Enabled: true, Params: map[string]string{"hops": "a,b"},
+			Secrets: map[string]string{"hopConfig.b": "conf", "hopClient.b": "id", "hopConfig.gone": "x"}},
+	}}
+	b, _ := json.Marshal(p)
+	res, err := Parse("profile.json", string(b))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := res.Connections[0].ID + "," + res.Connections[1].ID
+	if got := strings.Join(res.Connections[2].Hops(), ","); got != ids || !res.Connections[2].Enabled {
+		t.Errorf("hops = %q, want %q", got, ids)
+	}
+	ch, b2 := res.Connections[2], res.Connections[1].ID
+	if ch.S("hopConfig."+b2) != "conf" || ch.S("hopClient."+b2) != "id" || len(ch.Secrets) != 2 {
+		t.Errorf("chain users must follow the new hop ids: %v", ch.Secrets)
+	}
+}

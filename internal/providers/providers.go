@@ -94,7 +94,7 @@ func Get(t string) (Provider, error) {
 }
 
 // displayOrder puts the most common types first in the UI.
-var displayOrder = []string{"wireguard", "amnezia-server", "openconnect", "openvpn", "link", "hyperv", "upstream", "interface", "mihomo"}
+var displayOrder = []string{"wireguard", "amnezia-server", "openconnect", "openvpn", "link", "hyperv", "chain", "upstream", "interface", "mihomo"}
 
 func All() []Provider {
 	rank := func(t string) int {

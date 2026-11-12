@@ -209,6 +209,9 @@ func (a *App) commit(cfg *config.Config) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
+	if err := providers.ValidateChains(cfg); err != nil {
+		return err
+	}
 	for i := range cfg.Connections {
 		if err := providers.Validate(&cfg.Connections[i]); err != nil {
 			return err
@@ -248,6 +251,9 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 		if err := a.provisionAmnezia(&c); err != nil {
 			return "", err
 		}
+		if err := a.provisionChainKeys(&c, cfg); err != nil {
+			return "", err
+		}
 		cfg.Connections = append(cfg.Connections, c)
 	} else {
 		old := cfg.Conn(c.ID)
@@ -273,6 +279,9 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 		if err := a.provisionAmnezia(&c); err != nil {
 			return "", err
 		}
+		if err := a.provisionChainKeys(&c, cfg); err != nil {
+			return "", err
+		}
 		*old = c
 	}
 	if err := a.commit(cfg); err != nil {
@@ -290,15 +299,46 @@ func (a *App) DeleteConnection(id string) error {
 	cfg := a.Config()
 	var out []config.Connection
 	var name string
+	var deleted config.Connection
 	for _, c := range cfg.Connections {
 		if c.ID == id {
 			name = c.Name
+			deleted = c
 			go a.removeAmneziaClient(c)
+			if c.Type == config.TypeChain {
+				go a.removeChainClients(c, cfg.Clone())
+			}
 			continue
 		}
 		out = append(out, c)
 	}
 	cfg.Connections = out
+	// Chains lose it; a chain left with one hop is switched off, so its
+	// rules block instead of sending traffic through a shorter chain.
+	for i := range cfg.Connections {
+		ch := &cfg.Connections[i]
+		if ch.Type != config.TypeChain {
+			continue
+		}
+		hops := ch.Hops()
+		var keep []string
+		for _, h := range hops {
+			if h != id {
+				keep = append(keep, h)
+			}
+		}
+		if len(keep) == len(hops) {
+			continue
+		}
+		ch.SetHops(keep)
+		ch.Enabled = false
+		if cid := ch.S(providers.ChainClientSecret(id)); cid != "" {
+			go a.removeChainClient(deleted, cid)
+		}
+		delete(ch.Secrets, providers.ChainClientSecret(id))
+		delete(ch.Secrets, providers.ChainKeySecret(id))
+		a.Log.Warnf("app", i18n.T("app.chainOffAfterHopDeleted"), ch.Name, name)
+	}
 	// Rules that pointed at it must not silently become direct: block instead.
 	for i := range cfg.Rules {
 		if cfg.Rules[i].Target == id {
@@ -799,12 +839,13 @@ func (a *App) genConfigFor(cfg *config.Config) (map[string]any, error) {
 		if !c.Enabled {
 			continue
 		}
-		if _, ok := a.testPorts[c.ID]; !ok {
-			if p, err := freePort(); err == nil {
-				a.testPorts[c.ID] = p
-			}
-		}
-		tp[c.ID] = a.testPorts[c.ID]
+		tp[c.ID] = a.testPortLocked(c.ID)
+	}
+	// Hops before a WireGuard/AmneziaWG copy in a chain need a listener:
+	// the copy in the tunnel process reaches its server through it.
+	_, prev := engine.ChainTunnels(cfg)
+	for _, via := range prev {
+		tp[via] = a.testPortLocked(via)
 	}
 	a.mu.Unlock()
 	if m == nil {
@@ -820,6 +861,21 @@ func (a *App) genConfigFor(cfg *config.Config) (map[string]any, error) {
 		SelfProcesses: selfProcesses(),
 		NoIPv6:        !hasIPv6(),
 	})
+}
+
+// testPortLocked returns the port of the engine's plain listener bound to
+// an outbound, choosing one the first time. It stays the same for the
+// session. Caller holds a.mu.
+func (a *App) testPortLocked(name string) int {
+	if p, ok := a.testPorts[name]; ok {
+		return p
+	}
+	p, err := freePort()
+	if err != nil {
+		return 0
+	}
+	a.testPorts[name] = p
+	return p
 }
 
 func freePort() (int, error) {
@@ -895,6 +951,11 @@ func (a *App) Snapshot() Snapshot {
 				v.State, v.Detail, v.IP, v.DNS, v.Since, v.Prompt = rt.State, rt.Detail, rt.IP, rt.DNS, rt.Since, rt.Prompt
 			}
 		}
+		if c.Type == config.TypeChain && c.Enabled && a.running {
+			if why := a.chainProblemLocked(cfg, &c); why != "" {
+				v.State, v.Detail = "down", why
+			}
+		}
 		if a.running && c.Enabled {
 			v.LocalProxy = a.testPorts[c.ID]
 		}
@@ -906,6 +967,40 @@ func (a *App) Snapshot() Snapshot {
 	return s
 }
 
+// chainProblemLocked explains why a chain cannot carry traffic, or returns
+// "" if nothing is known to be wrong. Caller holds a.mu.
+func (a *App) chainProblemLocked(cfg *config.Config, c *config.Connection) string {
+	hops := c.Hops()
+	if len(hops) == 0 {
+		return ""
+	}
+	first := cfg.Conn(hops[0])
+	if first == nil {
+		return ""
+	}
+	if !first.Enabled {
+		return fmt.Sprintf(i18n.T("app.chainFirstHopOff"), first.Name)
+	}
+	if needsRuntime(first.Type) {
+		if rt := a.conns[first.ID]; rt == nil || rt.State != "up" {
+			return fmt.Sprintf(i18n.T("app.chainWaitsForFirstHop"), first.Name)
+		}
+	}
+	for _, ch := range engine.Chains(cfg) {
+		if ch.ID == c.ID {
+			return ""
+		}
+	}
+	for _, h := range hops[1:] {
+		if hc := cfg.Conn(h); hc != nil {
+			if _, err := providers.HopOutbound(c, hc); err != nil {
+				return fmt.Sprintf(i18n.T("app.chainHopBroken"), hc.Name, err)
+			}
+		}
+	}
+	return ""
+}
+
 // ---- helpers for the UI ----
 
 type ProviderView struct {
@@ -914,12 +1009,15 @@ type ProviderView struct {
 	Description string            `json:"description"`
 	Runtime     string            `json:"runtime"`
 	Fields      []providers.Field `json:"fields"`
+	// Follow: connections of this type can be a chain hop after the first.
+	Follow bool `json:"follow"`
 }
 
 func Providers() []ProviderView {
 	var out []ProviderView
 	for _, p := range providers.All() {
-		out = append(out, ProviderView{Type: p.Type(), Title: p.Title(), Description: p.Description(), Runtime: string(p.Runtime()), Fields: p.Fields()})
+		out = append(out, ProviderView{Type: p.Type(), Title: p.Title(), Description: p.Description(), Runtime: string(p.Runtime()), Fields: p.Fields(),
+			Follow: providers.TypeCanFollow(p.Type())})
 	}
 	return out
 }
