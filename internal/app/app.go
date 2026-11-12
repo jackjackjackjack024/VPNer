@@ -61,7 +61,11 @@ type App struct {
 	vmEndpoints map[string]engine.LocalEndpoint
 	testPorts   map[string]int
 	conns       map[string]*connRuntime
-	ssoFwd      net.Listener
+	// connecting: connections whose Connect is running, so that a second
+	// click while the first one still waits (the engine downloading, a VM
+	// being created) does not start them twice.
+	connecting map[string]bool
+	ssoFwd     net.Listener
 	// typedPass holds a password the user typed at a prompt; it is saved
 	// into the connection once the tunnel comes up with it.
 	typedPass map[string]string

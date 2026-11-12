@@ -1702,7 +1702,16 @@ function renderConns() {
   }
   $("#view").innerHTML = h;
 }
+// one request per connection and action at a time: a double click must not
+// connect twice or open two VM windows (the app guards against it as well)
+const connBusy = new Set();
 async function connAction(id, a) {
+  const key = id + "/" + a;
+  if (connBusy.has(key)) return;
+  connBusy.add(key);
+  try { await connActionNow(id, a); } finally { connBusy.delete(key); }
+}
+async function connActionNow(id, a) {
   await act(() => api("POST", `/api/connections/${id}/${a}`), a === "connect" ? tr("ui.connectionStarted") : null);
 }
 async function vmUpload(id, input) {

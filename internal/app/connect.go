@@ -22,9 +22,24 @@ import (
 )
 
 // Connect starts a connection that needs a runtime (WSL namespace or VM).
+// Only one start of a connection runs at a time: requests that come while it
+// is still starting (repeated clicks while the engine downloads, autostart)
+// are skipped, so a VM is never created twice.
 func (a *App) Connect(id string) error {
+	if !a.beginConnect(id) {
+		a.Log.Infof(id, "%s", i18n.T("app.alreadyConnecting"))
+		return nil
+	}
+	defer a.endConnect(id)
 	if !a.Running() {
+		// shown at once: starting routing can take minutes the first time
+		a.setConn(id, func(rt *connRuntime) {
+			rt.Want = true
+			rt.State, rt.Detail, rt.Prompt = "starting", i18n.T("app.waitingForRouting"), nil
+			rt.Since = time.Now().Unix()
+		})
 		if err := a.Start(); err != nil {
+			a.setConn(id, func(rt *connRuntime) { rt.State, rt.Detail, rt.Want = "failed", err.Error(), false })
 			return err
 		}
 	}
@@ -49,6 +64,26 @@ func (a *App) Connect(id string) error {
 		return nil // always available while routing is on
 	}
 	return fmt.Errorf(i18n.T("app.typeCannotBeConnected"), c.Type)
+}
+
+// beginConnect marks a connection as starting; false when it already is.
+func (a *App) beginConnect(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.connecting[id] {
+		return false
+	}
+	if a.connecting == nil {
+		a.connecting = map[string]bool{}
+	}
+	a.connecting[id] = true
+	return true
+}
+
+func (a *App) endConnect(id string) {
+	a.mu.Lock()
+	delete(a.connecting, id)
+	a.mu.Unlock()
 }
 
 func (a *App) setConn(id string, f func(rt *connRuntime)) {
