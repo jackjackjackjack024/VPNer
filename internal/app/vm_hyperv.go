@@ -152,6 +152,8 @@ func (a *App) vmConnect(id string, p VMRuntime) error {
 		// Remember what was set up in this VM: the app is installed only
 		// when the VM is created.
 		os.Remove(filepath.Join(dir, vmSubSent))
+		os.Remove(filepath.Join(dir, vmSetUpFile))
+		os.WriteFile(filepath.Join(dir, vmCreatedFile), []byte(strconv.FormatInt(time.Now().Unix(), 10)), 0o644)
 		if spec.App != "" {
 			if err := os.WriteFile(filepath.Join(dir, vmAppFile), []byte(spec.App), 0o644); err != nil {
 				a.Log.Warnf(id, "%v", err)
@@ -186,6 +188,61 @@ type gwStatus struct {
 	DefaultVia string   `json:"defaultVia"`
 	DNS        []string `json:"dns"`
 	Provision  string   `json:"provision"`
+	Step       string   `json:"step"` // the package being installed (agents of 0.3.1+)
+}
+
+// Files next to a VM: when it was created, and that its first setup ended.
+const (
+	vmCreatedFile = "created"
+	vmSetUpFile   = "set-up"
+)
+
+// vmSetupStart is when the first setup of a VM began, or zero once it has
+// ended. VMs made before 0.3.1 have no "created" file; their seed disk is
+// written only when the VM is created.
+func (a *App) vmSetupStart(id string) time.Time {
+	dir := a.vmDir(id)
+	if _, err := os.Stat(filepath.Join(dir, vmSetUpFile)); err == nil {
+		return time.Time{}
+	}
+	if b, err := os.ReadFile(filepath.Join(dir, vmCreatedFile)); err == nil {
+		if n, err := strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64); err == nil {
+			return time.Unix(n, 0)
+		}
+	}
+	if st, err := os.Stat(filepath.Join(dir, "seed.vhdx")); err == nil && time.Since(st.ModTime()) < 6*time.Hour {
+		return st.ModTime()
+	}
+	return time.Time{}
+}
+
+// setupDetail adds to a setup message how long the first setup has been
+// running and which package it installs, and says when nothing seems to
+// move, so it is clear the VM is still working.
+func setupDetail(base string, start time.Time, now time.Time, step string, stuck bool) string {
+	parts := []string{base}
+	if !start.IsZero() {
+		parts = append(parts, fmt.Sprintf(i18n.T("app.vmSetupFor"), max(1, int(now.Sub(start).Minutes()))))
+	}
+	if step != "" {
+		parts = append(parts, fmt.Sprintf(i18n.T("app.vmSetupPackage"), step))
+	}
+	if stuck {
+		parts = append(parts, i18n.T("app.vmSetupStuck"))
+	}
+	return strings.Join(parts, " · ")
+}
+
+// setupStuck: the same package for 15 minutes, or, with an agent that does
+// not report packages, 40 minutes of setup in all.
+func setupStuck(start, stepSince, now time.Time, step string) bool {
+	if start.IsZero() {
+		return false
+	}
+	if step != "" {
+		return now.Sub(stepSince) > 15*time.Minute
+	}
+	return now.Sub(start) > 40*time.Minute
 }
 
 var gwClient = &http.Client{Timeout: 4 * time.Second, Transport: &http.Transport{Proxy: nil,
@@ -210,17 +267,28 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 	defer t.Stop()
 	started := time.Now()
 	lastState := ""
+	lastStep, stepSince := "", time.Now()
 	for {
 		var st gwStatus
 		err := rt.get("/status", &st)
 		state, detail, ip := "", "", ""
 		var dns []string
+		now := time.Now()
+		if st.Step != lastStep {
+			lastStep, stepSince = st.Step, now
+		}
+		setup := a.vmSetupStart(id)
+		if err == nil && st.Provision != "running" && !setup.IsZero() {
+			// the first setup has ended: no more "how long" from now on
+			os.WriteFile(filepath.Join(a.vmDir(id), vmSetUpFile), nil, 0o644)
+			setup = time.Time{}
+		}
 		switch {
 		case err != nil:
 			state = "provisioning"
 			detail = i18n.T("app.virtualMachineIsBooting")
 			if time.Since(started) > 90*time.Second {
-				detail = i18n.T("app.firstVmSetupUpTo")
+				detail = setupDetail(i18n.T("app.firstVmSetupUpTo"), setup, now, "", setupStuck(setup, stepSince, now, ""))
 			}
 		case len(st.Tunnels) == 0:
 			state = "novpn"
@@ -233,6 +301,7 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 				if a.vmApp(id) != "" {
 					detail = i18n.T("app.vmAppInstalling")
 				}
+				detail = setupDetail(detail, setup, now, st.Step, setupStuck(setup, stepSince, now, st.Step))
 			}
 			if st.Provision == "error" && a.vmApp(id) != "" {
 				detail = i18n.T("app.vmAppSetupFailed")

@@ -6,6 +6,10 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- The card of a virtual machine shows how its first setup goes: how many minutes it has been running, which package it is installing, and that nothing has changed for a long time if it seems stuck. Before, it only said that the setup takes 5–15 minutes. Packages are shown for VMs created with this version; for older ones, the time.
+
 ### Fixed
 
 - A virtual machine could not be created on newer Windows 11 builds: Hyper-V stopped with "Virtual hard disk files must be uncompressed and unencrypted and must not be sparse (0xC03A001A)". VPNer wrote the Debian image as a sparse file to save space; now it writes a plain file, and an image left by an earlier version is turned into one by itself the next time a VM is created, without downloading it again.
