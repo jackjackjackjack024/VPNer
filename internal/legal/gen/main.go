@@ -32,7 +32,7 @@ const header = `VPNer - third-party notices
 %[1]s
 
 VPNer is provided "AS IS", without warranty of any kind. See LEGAL.md in the
-repository (https://github.com/progr4mmer2005/VPNer/blob/main/LEGAL.md) for
+repository (https://github.com/jackjackjackjack024/VPNer/blob/main/LEGAL.md) for
 the full legal information: warranty disclaimer, limitation of liability,
 privacy and trademarks.
 

@@ -136,7 +136,7 @@ powershell -ExecutionPolicy Bypass -File build.ps1
 **programmer2005** — обычный студент. Для работы понадобилось держать несколько VPN сразу: пару корпоративных и свой личный. Они постоянно конфликтовали между собой — так и появился VPNer.
 
 - Telegram: [@programmer2005](https://t.me/programmer2005)
-- GitHub: [progr4mmer2005](https://github.com/progr4mmer2005)
+- GitHub: [jackjackjackjack024](https://github.com/jackjackjackjack024)
 
 ## Поддержать проект
 
