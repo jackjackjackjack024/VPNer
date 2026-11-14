@@ -114,28 +114,20 @@ ethernets:
     addresses: [%s/24]
 `, c.WANMac, c.LANMac, c.LANIP)
 
-	desktopPkgs := ""
-	desktopCmds := ""
-	if c.Desktop {
-		desktopPkgs = "xfce4 xfce4-terminal xfce4-whiskermenu-plugin thunar mousepad lightdm lightdm-gtk-greeter firefox-esr firefox-esr-l10n-ru dbus-x11 xserver-xorg-core xserver-xorg-input-libinput fonts-dejavu fonts-noto-color-emoji xdg-utils policykit-1 gvfs file-roller"
-		desktopCmds = `  - [sh, -c, "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends ` + desktopPkgs + `"]
-  - [sh, -c, "mkdir -p /home/vpner/Desktop && ln -sfn /srv/vpner-share '/home/vpner/Desktop/` + i18n.T("hyperv.filesFolder") + `' && cp /etc/vpner/README.txt /home/vpner/Desktop/README.txt && chown -R vpner:vpner /home/vpner"]
-  - [sh, -c, "printf '[Seat:*]\nautologin-user=vpner\nautologin-session=xfce\n' > /etc/lightdm/lightdm.conf.d/50-vpner.conf"]
-  - [sh, -c, "printf 'XKBLAYOUT=\"us,ru\"\nXKBOPTIONS=\"grp:alt_shift_toggle\"\n' > /etc/default/keyboard"]
-  - [systemctl, set-default, graphical.target]
-  - [systemctl, restart, lightdm]
-`
+	// Files of the setup (setup.go), the desktop and the app; the setup
+	// itself runs in vpner-setup.service, retried until it succeeds.
+	extra := []seedFile{
+		{"/usr/local/sbin/vpner-setup", "0755", setupScript(c.Desktop, c.App)},
+		{"/etc/systemd/system/vpner-setup.service", "0644", setupUnit},
 	}
-
-	// The app is installed after the desktop: it needs it, and its session
-	// script waits until the app is there.
-	appFilesYAML, appCmds := "", ""
-	extra, cmds := appFiles(c.App)
+	if c.Desktop {
+		extra = append(extra, desktopFiles()...)
+	}
+	appFileList, _, _ := appFiles(c.App)
+	extra = append(extra, appFileList...)
+	appFilesYAML := ""
 	for _, f := range extra {
 		appFilesYAML += fmt.Sprintf("  - path: %s\n    permissions: %q\n    content: |\n%s\n", f.Path, f.Mode, indent(f.Content, "      "))
-	}
-	for _, cmd := range cmds {
-		appCmds += "  - [sh, -c, " + yamlStr(cmd) + "]\n"
 	}
 
 	user := fmt.Sprintf(`#cloud-config
@@ -177,19 +169,16 @@ write_files:
     defer: true
     content: |
 %[6]s
-%[8]sruncmd:
+%[7]sruncmd:
   - [sh, -c, "mkdir -p /mnt/seed && (mount -L CIDATA /mnt/seed || mount -L cidata /mnt/seed) && install -D -m 0755 /mnt/seed/vpner-agent /opt/vpner/vpner-agent && umount /mnt/seed"]
   - [sh, -c, "systemctl disable --now ssh ssh.socket 2>/dev/null || true"]
-  - [sh, -c, "for i in 1 2 3 4 5; do apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends nftables locales && break; sleep 10; done"]
-  - [sh, -c, "mkdir -p /srv/vpner-share && chown vpnergw:vpner /srv/vpner-share && chmod 2775 /srv/vpner-share"]
-  - [sh, -c, "systemctl daemon-reload && systemctl enable --now vpner-gateway"]
-  - [sh, -c, "sed -i 's/^# *ru_RU.UTF-8/ru_RU.UTF-8/' /etc/locale.gen && locale-gen && update-locale LANG=ru_RU.UTF-8"]
-%[7]s%[9]s`, c.Hostname, yamlStr(c.ConsolePass),
+  - [sh, -c, "systemctl daemon-reload && systemctl enable vpner-setup.service && systemctl start --no-block vpner-setup.service"]
+`, c.Hostname, yamlStr(c.ConsolePass),
 		indent(fmt.Sprintf(killSwitchNFT, LANHost), "      "),
 		indent(gatewayUnit, "      "),
 		indent(readme(), "      "),
 		indent(string(gw), "      "),
-		desktopCmds, appFilesYAML, appCmds)
+		appFilesYAML)
 
 	files := map[string][]byte{
 		"meta-data":      []byte(meta),
