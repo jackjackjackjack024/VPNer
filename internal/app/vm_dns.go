@@ -13,8 +13,8 @@ import (
 
 // A VM with a VPN program VPNer set up (INCY) gets a DNS server of its own:
 // Cloudflare over DoH, reached through that VM. Names of sites that go out
-// directly are then resolved past the local network's DNS, which can neither
-// see them nor change the answers.
+// directly are then resolved past the local network's DNS, which does not
+// see them.
 const vmDoH = "https://cloudflare-dns.com/dns-query"
 
 // vmDNSID is the id of the DNS server VPNer adds for the VM connection id.
