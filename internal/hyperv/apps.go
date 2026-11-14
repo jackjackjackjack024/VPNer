@@ -16,7 +16,9 @@ const AppIncy = "incy"
 const (
 	incyVersion = "3.9.0"
 	incyURL     = "https://github.com/INCY-DEV/incy-platforms/releases/download/desktop-v" + incyVersion + "/incy-linux-x64.deb"
-	incySHA256  = "1dc8f1c110068424ec657ab11cac3745ec61c8e1f6154918f9451250db26db8a"
+	// INCY replaced the 3.9.0 package on GitHub on 2026-11-10; this is the
+	// SHA-256 of the current one (GitHub's own digest of the asset).
+	incySHA256 = "088e7229a33539626cfac10b32b0a77c9a9883c3ce8eb73a9cac1a4baf096be9"
 )
 
 // IncySubscriptionFile is the name, in the VM's shared folder, of the file
@@ -24,26 +26,39 @@ const (
 // reads it, deletes it and passes the link to INCY.
 const IncySubscriptionFile = "vpner-incy-subscription.txt"
 
-// incyInstall runs as root once, at the first boot.
+// incyInstall runs as root from the VM setup (setupScript). It exits 2 when
+// the package could not be downloaded and 3 when it could not be installed;
+// the setup reports that and retries later.
+//
+// The package is 130 MB from GitHub, which can be slow: the download
+// resumes where it stopped instead of starting over, the partial file is
+// kept between attempts and between setup runs, and only a file that is
+// complete but not the pinned one is thrown away.
 const incyInstall = `#!/bin/sh
 # Installs the INCY VPN client (pinned version, checked by SHA-256).
 set -u
+[ -x /opt/incy/bin/incy ] && exit 0
 DEB=/var/tmp/incy.deb
-for i in 1 2 3 4 5; do
-  if curl -fsSL --retry 3 -o "$DEB" "` + incyURL + `" &&
-     echo "` + incySHA256 + `  $DEB" | sha256sum -c - >/dev/null; then
-    break
+SUM="` + incySHA256 + `"
+good() { [ -f "$DEB" ] && echo "$SUM  $DEB" | sha256sum -c - >/dev/null 2>&1; }
+i=0
+while [ $i -lt 30 ] && ! good; do
+  i=$((i + 1))
+  curl -fsSL -C - --retry 5 --retry-delay 10 --connect-timeout 30 -o "$DEB" "` + incyURL + `"
+  rc=$?
+  # complete but not the pinned file, or the server refused to resume
+  if ! good && { [ $rc -eq 0 ] || [ $rc -eq 22 ] || [ $rc -eq 33 ] || [ $rc -eq 36 ]; }; then
+    rm -f "$DEB"
   fi
-  rm -f "$DEB"
+  good || sleep 10
+done
+good || { echo "vpner: INCY could not be downloaded" >&2; exit 2; }
+for i in 1 2 3; do
+  DEBIAN_FRONTEND=noninteractive apt-get -o DPkg::Lock::Timeout=1800 install -y "$DEB" pkexec polkitd && break
   sleep 15
 done
-[ -f "$DEB" ] || { echo "vpner: INCY could not be downloaded" >&2; exit 1; }
-for i in 1 2 3; do
-  DEBIAN_FRONTEND=noninteractive apt-get install -y "$DEB" pkexec polkitd && break
-  sleep 10
-done
+[ -x /opt/incy/bin/incy ] || { echo "vpner: INCY could not be installed" >&2; exit 3; }
 rm -f "$DEB"
-[ -x /opt/incy/bin/incy ]
 `
 
 // incyPolkit lets the VM user run INCY's privileged helper (it creates the
@@ -105,8 +120,8 @@ X-GNOME-Autostart-enabled=true
 `
 
 // appFiles returns the files an app puts into the VM (path -> mode,
-// content) and the commands to run at the first boot.
-func appFiles(app string) (files []seedFile, cmds []string) {
+// content), the Debian packages it needs and the script that installs it.
+func appFiles(app string) (files []seedFile, pkgs []string, install string) {
 	switch app {
 	case AppIncy:
 		return []seedFile{
@@ -114,12 +129,9 @@ func appFiles(app string) (files []seedFile, cmds []string) {
 			{"/etc/polkit-1/rules.d/49-vpner-incy.rules", "0644", incyPolkit},
 			{"/usr/local/bin/vpner-incy", "0755", incySession},
 			{"/etc/xdg/autostart/vpner-incy.desktop", "0644", incyAutostart},
-		}, []string{
-			`DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends curl ca-certificates python3`,
-			`/usr/local/sbin/vpner-incy-install`,
-		}
+		}, []string{"curl", "ca-certificates", "python3"}, "/usr/local/sbin/vpner-incy-install"
 	}
-	return nil, nil
+	return nil, nil, ""
 }
 
 type seedFile struct {

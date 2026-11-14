@@ -47,6 +47,9 @@ type GatewayStatus struct {
 	// Step: the package being installed while the setup runs (dpkg.log is
 	// readable by the gateway user, the cloud-init log is not).
 	Step string `json:"step,omitempty"`
+	// Error: why the setup failed (a code of hyperv.SetupErr*); it is
+	// retried by itself.
+	Error string `json:"error,omitempty"`
 }
 
 type Tunnel struct {
@@ -173,7 +176,16 @@ func defaultRouteIface() string {
 	return best
 }
 
-func provisionState() string {
+func provisionState() (string, string) {
+	if b, err := os.ReadFile("/var/lib/vpner/setup-state"); err == nil {
+		if st, code, ok := setupState(string(b)); ok {
+			return st, code
+		}
+	}
+	return cloudInitState(), ""
+}
+
+func cloudInitState() string {
 	if _, err := os.Stat("/var/lib/cloud/instance/boot-finished"); err == nil {
 		b, _ := os.ReadFile("/run/cloud-init/result.json")
 		if strings.Contains(string(b), `"errors": [`) && !strings.Contains(string(b), `"errors": []`) {
@@ -185,8 +197,9 @@ func provisionState() string {
 }
 
 func (g *gateway) status() GatewayStatus {
+	prov, code := provisionState()
 	s := GatewayStatus{Version: Version, Tunnels: g.tunnels(), DefaultVia: defaultRouteIface(), DNS: g.dnsServers(),
-		Provision: provisionState(), Uptime: int64(time.Since(g.start).Seconds())}
+		Provision: prov, Error: code, Uptime: int64(time.Since(g.start).Seconds())}
 	if s.Provision == "running" {
 		s.Step = dpkgStep(fileTail("/var/log/dpkg.log", 8<<10), g.start.Add(-time.Minute))
 	}

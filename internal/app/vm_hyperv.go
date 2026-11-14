@@ -188,7 +188,27 @@ type gwStatus struct {
 	DefaultVia string   `json:"defaultVia"`
 	DNS        []string `json:"dns"`
 	Provision  string   `json:"provision"`
-	Step       string   `json:"step"` // the package being installed (agents of 0.3.1+)
+	Step       string   `json:"step"`  // the package being installed (agents of 0.3.1+)
+	Error      string   `json:"error"` // why the setup failed, hyperv.SetupErr* (agents of 0.3.2+)
+}
+
+// setupErrorText says in words why the VM setup failed.
+func setupErrorText(code string) string {
+	switch code {
+	case hyperv.SetupErrPackages:
+		return i18n.T("app.vmSetupErrPackages")
+	case hyperv.SetupErrGateway:
+		return i18n.T("app.vmSetupErrGateway")
+	case hyperv.SetupErrDesktop:
+		return i18n.T("app.vmSetupErrDesktop")
+	case hyperv.SetupErrAppPackages:
+		return i18n.T("app.vmSetupErrAppPackages")
+	case hyperv.SetupErrAppDownload:
+		return i18n.T("app.vmSetupErrAppDownload")
+	case hyperv.SetupErrAppInstall:
+		return i18n.T("app.vmSetupErrAppInstall")
+	}
+	return code
 }
 
 // Files next to a VM: when it was created, and that its first setup ended.
@@ -210,8 +230,10 @@ func (a *App) vmSetupStart(id string) time.Time {
 			return time.Unix(n, 0)
 		}
 	}
-	if st, err := os.Stat(filepath.Join(dir, "seed.vhdx")); err == nil && time.Since(st.ModTime()) < 6*time.Hour {
-		return st.ModTime()
+	// The disk is created with the VM; its write time changes all along, and
+	// so does the seed disk's (the VM mounts it), so the creation time counts.
+	if t := fileCreated(filepath.Join(dir, "disk.vhdx")); !t.IsZero() && time.Since(t) < 6*time.Hour {
+		return t
 	}
 	return time.Time{}
 }
@@ -278,8 +300,9 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 			lastStep, stepSince = st.Step, now
 		}
 		setup := a.vmSetupStart(id)
-		if err == nil && st.Provision != "running" && !setup.IsZero() {
+		if err == nil && st.Provision == "done" && !setup.IsZero() {
 			// the first setup has ended: no more "how long" from now on
+			// (after an error it is retried, so it has not ended)
 			os.WriteFile(filepath.Join(a.vmDir(id), vmSetUpFile), nil, 0o644)
 			setup = time.Time{}
 		}
@@ -303,8 +326,13 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 				}
 				detail = setupDetail(detail, setup, now, st.Step, setupStuck(setup, stepSince, now, st.Step))
 			}
-			if st.Provision == "error" && a.vmApp(id) != "" {
-				detail = i18n.T("app.vmAppSetupFailed")
+			if st.Provision == "error" {
+				if st.Error != "" {
+					// agents of 0.3.2+: the reason, and the setup retries by itself
+					detail = fmt.Sprintf(i18n.T("app.vmSetupFailedRetry"), setupErrorText(st.Error))
+				} else if a.vmApp(id) != "" {
+					detail = i18n.T("app.vmAppSetupFailed")
+				}
 			}
 		default:
 			state = "up"

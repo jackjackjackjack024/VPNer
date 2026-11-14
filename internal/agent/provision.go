@@ -5,6 +5,22 @@ import (
 	"time"
 )
 
+// setupState reads the state file of the VM setup (hyperv.SetupStateFile:
+// "running", "done" or "error <code>"). ok is false when there is none: a
+// VM made before 0.3.2, or before the setup started, where cloud-init tells.
+func setupState(content string) (state, code string, ok bool) {
+	s := strings.TrimSpace(content)
+	switch {
+	case s == "":
+		return "", "", false
+	case s == "done":
+		return "done", "", true
+	case strings.HasPrefix(s, "error"):
+		return "error", strings.TrimSpace(strings.TrimPrefix(s, "error")), true
+	}
+	return "running", "", true
+}
+
 // dpkgStep returns the package dpkg worked on last, from the tail of
 // /var/log/dpkg.log, so the host can show how the VM setup goes. Lines older
 // than since are left out: the Debian image comes with entries of its own
