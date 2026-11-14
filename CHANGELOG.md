@@ -6,6 +6,14 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- A virtual machine with INCY gets its own DNS server, "Cloudflare via <connection name>": encrypted DNS (DoH) reached through the VM, so the local network can neither see the names of sites that open directly nor change the answers. It is added once INCY actually passes traffic, so a VM that is still setting up or connecting never leaves the computer without DNS. It becomes the default if the default was the system DNS; a default you chose yourself is kept. It is added once: if you delete it or choose the system DNS again on the DNS tab, it stays so.
+
+### Fixed
+
+- An open VPNer window kept showing old settings after they were changed elsewhere (for example, a DNS server added by VPNer itself), and saving the DNS tab could then undo the change. The window now reloads the settings whenever they are saved.
+
 ## [0.3.2] - 2026-11-14
 
 ### Fixed
