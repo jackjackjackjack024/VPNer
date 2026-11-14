@@ -349,6 +349,9 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 		if err == nil {
 			a.deliverVMApp(id)
 		}
+		if state == "up" {
+			a.vmDNS(id)
+		}
 		a.setConn(id, func(r *connRuntime) {
 			if r.State != state {
 				r.Since = time.Now().Unix()
@@ -487,6 +490,65 @@ func (a *App) deliverVMApp(id string) {
 		a.Log.Warnf(id, "%v", err)
 	}
 	a.Log.Infof(id, "%s", i18n.T("app.vmAppSubscriptionSent"))
+}
+
+// vmDNSFile marks that VPNer has set up the VM's DNS server (vm_dns.go): it
+// is done once, so a server the user deleted or a default the user changed
+// afterwards stays as the user left it.
+const vmDNSFile = "dns.added"
+
+var vmDNSTry sync.Map // connection id -> time of the last attempt
+
+// vmDNS adds the DNS server of a VM with a VPN program VPNer set up, once
+// that VPN passes traffic: the server must answer through it first.
+func (a *App) vmDNS(id string) {
+	if a.vmApp(id) == "" {
+		return
+	}
+	mark := filepath.Join(a.vmDir(id), vmDNSFile)
+	if _, err := os.Stat(mark); err == nil {
+		return
+	}
+	if t, ok := vmDNSTry.Load(id); ok && time.Since(t.(time.Time)) < time.Minute {
+		return
+	}
+	vmDNSTry.Store(id, time.Now())
+	a.mu.Lock()
+	port, running := a.testPorts[id], a.running
+	a.mu.Unlock()
+	if !running || port == 0 {
+		return
+	}
+	go func() {
+		if err := dohWorks(fmt.Sprintf("http://127.0.0.1:%d", port)); err != nil {
+			return // the VPN passes nothing yet: tried again in a minute
+		}
+		a.ops.Lock()
+		cfg := a.Config()
+		c := cfg.Conn(id)
+		if c == nil {
+			a.ops.Unlock()
+			return
+		}
+		changed, def := withVMDNS(&cfg.DNS, id, c.Name)
+		var err error
+		if changed {
+			err = a.commit(cfg)
+		}
+		a.ops.Unlock()
+		if err != nil {
+			a.Log.Warnf(id, "%v", err)
+			return
+		}
+		os.WriteFile(mark, nil, 0o644)
+		name := fmt.Sprintf(i18n.T("app.cloudflareViaConn"), c.Name)
+		switch {
+		case def:
+			a.Log.Infof(id, i18n.T("app.vmDnsAddedDefault"), name)
+		case changed:
+			a.Log.Infof(id, i18n.T("app.vmDnsAdded"), name)
+		}
+	}()
 }
 
 // VMUpload sends a file into the VM's shared folder.

@@ -889,8 +889,13 @@ function connectEvents() {
 let promptOpen = null;
 function onState(prev) {
   renderHeader();
-  const needCfg = !prev || (prev.connections || []).length !== (S.state.connections || []).length;
-  if (needCfg) loadConfig().then(() => { if (["conns", "rules"].includes(S.tab)) render(); });
+  // the configuration changed: added or deleted connections, or saved
+  // elsewhere (VPNer itself adds a DNS server for a VM)
+  const needCfg = !prev || (prev.connections || []).length !== (S.state.connections || []).length || prev.configRev !== S.state.configRev;
+  if (needCfg) loadConfig().then(() => {
+    if (S.tab === "dns" && !S.dnsDirty) { S.dnsDraft = null; render(); }
+    else if (["conns", "rules"].includes(S.tab)) render();
+  });
   else if (S.tab === "conns" || S.tab === "check") render();
   if (S.state.quitAsk) showQuitConfirm();
   const p = (S.state.connections || []).find(c => c.prompt);

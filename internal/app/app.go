@@ -76,8 +76,11 @@ type App struct {
 	applyMu sync.Mutex
 
 	changed chan struct{} // signals UI that the snapshot changed
-	subMu   sync.Mutex
-	subs    map[chan struct{}]struct{}
+	// cfgRev counts saved configurations, so an open window reloads one
+	// that VPNer changed by itself (e.g. a DNS server added for a VM).
+	cfgRev int64
+	subMu  sync.Mutex
+	subs   map[chan struct{}]struct{}
 }
 
 type SetupState struct {
@@ -226,6 +229,7 @@ func (a *App) commit(cfg *config.Config) error {
 	}
 	a.mu.Lock()
 	a.cfg = cfg
+	a.cfgRev++
 	running := a.running
 	a.mu.Unlock()
 	a.notify()
@@ -922,13 +926,15 @@ type Snapshot struct {
 	Foreign []string `json:"foreign,omitempty"`
 	// QuitAsk: the user chose "Выход" while VPNs are on — confirm in the UI.
 	QuitAsk bool `json:"quitAsk,omitempty"`
+	// ConfigRev changes whenever the configuration is saved.
+	ConfigRev int64 `json:"configRev"`
 }
 
 func (a *App) Snapshot() Snapshot {
 	cfg := a.Config()
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	s := Snapshot{Running: a.running, Starting: a.starting, Error: a.lastError, KillSwitch: a.ks.Active(), Foreign: a.foreign, QuitAsk: a.quitAsk}
+	s := Snapshot{Running: a.running, Starting: a.starting, Error: a.lastError, KillSwitch: a.ks.Active(), Foreign: a.foreign, QuitAsk: a.quitAsk, ConfigRev: a.cfgRev}
 	if a.setup != nil {
 		st := *a.setup
 		s.Setup = &st
