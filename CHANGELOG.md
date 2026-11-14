@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-14
+
 ### Fixed
 
 - A virtual machine got no desktop and no VPN program on Debian 13, and VPNer did not say so. The setup failed on several things at once: a package that is gone in Debian 13 (policykit-1) made apt install no desktop at all; apt gave up while Debian's own automatic updates held its lock at the first boot; the autologin file went to a folder that does not exist; Xorg could not use the Hyper-V video card ("Cannot run in framebuffer mode"); and INCY's package had been replaced on GitHub, so its checksum no longer matched and the download, which could not resume, started over and over. Now packages missing from Debian are skipped instead of stopping the install, apt waits for its lock, the desktop files are written with their folders, Xorg gets a section for the Hyper-V video card, the INCY checksum is the current one and its download resumes. The setup runs as a service that retries by itself (10 minutes after a failure and whenever the VM starts) until it succeeds, and the VM card says why it failed.
