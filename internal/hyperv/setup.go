@@ -120,6 +120,7 @@ for i in 1 2 3 4 5; do $APT update && { updated=1; break; }; sleep 20; done
 [ -n "$updated" ] || fail ` + SetupErrPackages + `
 pkgs nftables locales || fail ` + SetupErrPackages + `
 mkdir -p /srv/vpner-share && chown vpnergw:vpner /srv/vpner-share && chmod 2775 /srv/vpner-share
+install -d -o vpner -g vpnergw -m 2750 ` + appLogDir + `
 systemctl daemon-reload && systemctl enable --now vpner-gateway || fail ` + SetupErrGateway + `
 sed -i 's/^# *ru_RU.UTF-8/ru_RU.UTF-8/' /etc/locale.gen && locale-gen && update-locale LANG=ru_RU.UTF-8 || true
 `)

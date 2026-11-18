@@ -3,6 +3,7 @@ package app
 import (
 	"vpner/internal/i18n"
 
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -172,6 +173,7 @@ func (a *App) vmConnect(id string, p VMRuntime) error {
 		close(old.stop)
 	}
 	a.vms[id] = rt
+	delete(a.vmHealth, id) // connected anew: the restart count starts over
 	a.vmEndpoints[id] = engine.LocalEndpoint{Server: rt.ip, Port: 1080, User: rt.user, Pass: rt.pass, Iface: hyperv.LANAlias}
 	a.mu.Unlock()
 	a.setConn(id, func(r *connRuntime) { r.State, r.Detail = "provisioning", i18n.T("app.virtualMachineIsStarting") })
@@ -348,6 +350,7 @@ func (a *App) watchVM(id string, rt *vmRuntime) {
 		}
 		if err == nil {
 			a.deliverVMApp(id)
+			a.pullVMAppLog(id, rt)
 		}
 		if state == "up" {
 			a.vmDNS(id)
@@ -549,6 +552,69 @@ func (a *App) vmDNS(id string) {
 			a.Log.Infof(id, i18n.T("app.vmDnsAdded"), name)
 		}
 	}()
+}
+
+// vmLogMark keeps how far VPNer has read the log of the VM's VPN program,
+// so that a restart of VPNer does not show it again.
+const vmLogMark = "applog.offset"
+
+// pullVMAppLog copies the new lines of the VM's VPN program log (INCY) into
+// VPNer's log, under the VM connection: everything in one place. Agents
+// older than 0.3.4 have no log to give; nothing is shown for them.
+func (a *App) pullVMAppLog(id string, rt *vmRuntime) {
+	app := a.vmApp(id)
+	if app == "" {
+		return
+	}
+	mark := filepath.Join(a.vmDir(id), vmLogMark)
+	var off int64 = -1 // never read: only the end of the log is shown
+	if b, err := os.ReadFile(mark); err == nil {
+		off, _ = strconv.ParseInt(strings.TrimSpace(string(b)), 10, 64)
+	}
+	req, _ := http.NewRequest(http.MethodGet, fmt.Sprintf("http://%s:1081/applog?name=incy.log&offset=%d", rt.ip, max(off, 0)), nil)
+	req.SetBasicAuth(rt.user, rt.pass)
+	resp, err := gwClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return
+	}
+	from, _ := strconv.ParseInt(resp.Header.Get("X-Log-Offset"), 10, 64)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return
+	}
+	// Whole lines only; a line still being written comes next time.
+	n := bytes.LastIndexByte(body, '\n') + 1
+	lines := strings.Split(strings.TrimRight(string(body[:n]), "\r\n"), "\n")
+	if off < 0 && len(lines) > 30 {
+		lines = lines[len(lines)-30:]
+	}
+	name := appTitle(app)
+	for _, line := range lines {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		if l := strings.ToLower(line); strings.Contains(l, "[warning]") || strings.Contains(l, "[error") || strings.Contains(l, "/error]") {
+			a.Log.Warnf(id, "%s: %s", name, line)
+		} else {
+			a.Log.Infof(id, "%s: %s", name, line)
+		}
+	}
+	if next := from + int64(n); next != off {
+		os.WriteFile(mark, []byte(strconv.FormatInt(next, 10)), 0o644)
+	}
+}
+
+// appTitle names a VM's VPN program in VPNer's log.
+func appTitle(app string) string {
+	if app == hyperv.AppIncy {
+		return "INCY"
+	}
+	return app
 }
 
 // VMUpload sends a file into the VM's shared folder.

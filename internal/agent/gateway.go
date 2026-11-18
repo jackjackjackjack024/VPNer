@@ -90,6 +90,7 @@ func Gateway(cfgPath string) error {
 		json.NewEncoder(w).Encode(g.status())
 	})
 	mux.HandleFunc("/upload", g.upload)
+	mux.HandleFunc("/applog", appLog(AppLogDir))
 	hl, err := listenRetry("tcp4", net.JoinHostPort(cfg.Listen, "1081"))
 	if err != nil {
 		return err

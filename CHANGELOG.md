@@ -6,6 +6,28 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+### Added
+
+- The log of INCY inside a virtual machine shows up in VPNer's log, under that connection, so everything is in one place. For VMs created with this version.
+- The chain editor offers to reach an Amnezia server over XRay (TCP) instead of AmneziaWG (UDP) when the server is a later hop, for example after a VPN app in a virtual machine that passes only TCP. One button does it all: VPNer logs in to the server, sets up its XRay for chains (restarting only XRay), creates the XRay connection and puts it into the chain. If the server has no XRay yet, the window shows step by step how to install it in the AmneziaVPN app.
+- XRay access shared from the AmneziaVPN app can be added as a connection: the key for the AmneziaVPN app (vpn://) and the XRay native format (.json file) both become a VLESS connection.
+- Presets: several whole setups (connections, rules, DNS, routing settings) under names, in the Settings section that was Profile and is now Profile and presets. One runs, another one is switched to in a click; a new preset starts as a copy of the running one or empty. A preset can be exported by itself or all presets together; on import, for every name that is already taken you choose to replace the existing preset, rename it, rename the new one or skip it, or make one choice for all of them. Profiles exported by earlier versions are imported as presets too.
+- The ready-made rule sets are split by service: Claude, ChatGPT and Grok, and Instagram, Facebook and WhatsApp, are now separate sets.
+- A home screen: the routing switch in the middle, under it the preset (switched right there), the connections and the rules at a glance. The window uses its whole width, so buttons on the right line up with the header, and Settings shows its panels in two columns on a wide window.
+- The chain editor explains, for a connection after a VPN program in a virtual machine, a container or behind a proxy, why it will most likely not connect and what to do: a connection over UDP (WireGuard, AmneziaWG, Hysteria2, TUIC) and a REALITY connection with a decoy name each get the steps and what to ask the owner of the server for.
+- When the VPN program VPNer runs in a virtual machine shows a tunnel but passes nothing for 3 minutes, VPNer restarts the virtual machine, less and less often, at most 3 times in a row, and then says so in the log.
+
+### Fixed
+
+- A chain through a virtual machine could never connect to an AmneziaWG server: VPNer took local ports from the range that Hyper-V reserves blocks of for itself, and UDP on such a port was refused ("access forbidden"). VPNer now takes ports outside that range, free for both TCP and UDP.
+- One connection that stopped answering took the others down: all AmneziaWG/WireGuard tunnels ran in one process, and rebuilding one restarted them all. A connection whose server the current network does not reach was rebuilt every two minutes and each time broke a chain that worked, and the other way round. Now every tunnel has its own process and only the one that stopped answering is rebuilt, less and less often (up to every 15 minutes) while it does not come back; a chain is not rebuilt while its first hop itself passes no traffic.
+- Changing the key of an Amnezia server connection left VPNer's old user on the server. It is now removed before the new one is created.
+- A VLESS or Trojan connection with REALITY never connected to a server running a recent Xray-core (the log only said it "does not respond"): such a server answers only a TLS handshake that offers the X25519MLKEM768 key exchange, and VPNer sent the older one. Older servers are the other way round, and a link does not say which kind the server is. VPNer now finds out by itself: when such a connection does not answer, it tries the other handshake, and if that one works, switches within seconds and remembers the choice for the connection and for chains that end in it.
+- A chain through a VPN app that routes connections by the site name they carry could not reach a REALITY server: the app sent the connection to the real site whose name the server uses as its cover. For chains VPNer now has the server also answer for a name that points to the server itself.
+- INCY in a virtual machine could stay "connected" while passing nothing, whatever server was chosen: it could not start its core again ("core startup failed") while its old helper held the ports. In virtual machines created with this version, VPNer restarts INCY and its helper by itself when that happens.
+- In the CLI theme, block frames showed only their corners: Edge leaves out the edges of such a frame drawn as SVG. The frames are now drawn on a canvas.
+- A DNS server reached through a connection (for example "Cloudflare via" a virtual machine) left the whole computer without DNS while that connection was not running yet, such as in the first minute after VPNer started, before the VM was up: every name failed with "interface not found". Now such a server is skipped until its connection runs, and names are resolved by the other default servers or the system DNS meanwhile.
+
 ## [0.3.3] - 2026-11-14
 
 ### Added

@@ -21,6 +21,10 @@ const (
 	incySHA256 = "088e7229a33539626cfac10b32b0a77c9a9883c3ce8eb73a9cac1a4baf096be9"
 )
 
+// appLogDir is where the VM's VPN program logs are copied for the gateway
+// (agent.AppLogDir): written by the VM user, read by the gateway's group.
+const appLogDir = "/var/log/vpner-app"
+
 // IncySubscriptionFile is the name, in the VM's shared folder, of the file
 // through which VPNer hands INCY a subscription link. The session script
 // reads it, deletes it and passes the link to INCY.
@@ -69,7 +73,27 @@ polkit.addRule(function(action, subject) {
   if (action.id == "cc.incy.vpn.run-helper" && subject.user == "vpner") {
     return polkit.Result.YES;
   }
+  // VPNer's own reset of INCY's helper, see incyReset
+  if (action.id == "org.freedesktop.policykit.exec" && subject.user == "vpner" &&
+      action.lookup("program") == "` + incyResetPath + `") {
+    return polkit.Result.YES;
+  }
 });
+`
+
+// incyResetPath stops INCY's root helper (incy-worker). Sometimes INCY can
+// no longer start its core ("core startup failed" in its log) while the
+// helper from before still holds its ports: INCY then shows "connected"
+// but passes nothing, whatever server is chosen. A fresh start of INCY and
+// of its helper cures it; the session script does that by itself.
+const incyResetPath = "/usr/local/sbin/vpner-incy-reset"
+
+const incyReset = `#!/bin/sh
+# VPNer: stops INCY's root helper, so that INCY starts a fresh one.
+pkill -KILL -f 'incy-worker'
+sleep 1
+ip link show tun_incy >/dev/null 2>&1 && ip link delete tun_incy
+exit 0
 `
 
 // incySession runs in the desktop session of the VM user.
@@ -98,6 +122,33 @@ EOF
 # INCY names the device after the computer: the name chosen in VPNer.
 export HOSTNAME="$(hostname)"
 pgrep -u "$(id -u)" -f /opt/incy/ >/dev/null || "$BIN" >/dev/null 2>&1 &
+# INCY's log goes to VPNer's log: copied where the gateway can read it (it
+# cannot see home folders), and VPNer fetches the new lines.
+LOGS="${XDG_CACHE_HOME:-$HOME/.cache}/incy"
+OUT=` + appLogDir + `
+# INCY that cannot start its core ("core startup failed") while its old
+# helper holds the ports passes nothing: INCY and its helper are started
+# afresh, at most every minute, then less and less often while it repeats.
+failed() { grep -h 'core startup failed' "$LOGS/incy.log" 2>/dev/null | tail -n 1; }
+( last=$(failed); next=0; pause=60; resetAt=0
+  while :; do
+    f=$(failed); now=$(date +%s)
+    if [ -n "$f" ] && [ "$f" != "$last" ] && [ "$now" -ge "$next" ]; then
+      last=$f
+      [ $((now - resetAt)) -gt 3600 ] && pause=60
+      echo "$(date '+%Y-%m-%d %H:%M:%S').000 [VPNER] INCY could not start its core: restarting INCY and its helper" >>"$LOGS/incy.log"
+      pkill -u "$(id -u)" -f /opt/incy/
+      sleep 2
+      pkexec ` + incyResetPath + ` >/dev/null 2>&1
+      sleep 2
+      "$BIN" >/dev/null 2>&1 &
+      resetAt=$now; next=$((now + pause)); pause=$((pause * 2)); [ $pause -gt 1800 ] && pause=1800
+    fi
+    if [ -d "$OUT" ] && [ -f "$LOGS/incy.log" ] && [ "$LOGS/incy.log" -nt "$OUT/incy.log" ]; then
+      cp "$LOGS/incy.log" "$OUT/.incy.log.tmp" && mv -f "$OUT/.incy.log.tmp" "$OUT/incy.log"
+    fi
+    sleep 5
+  done ) &
 while :; do
   if [ -s "$SUB" ]; then
     url=$(head -n 1 "$SUB" | tr -d '\r\n')
@@ -127,6 +178,7 @@ func appFiles(app string) (files []seedFile, pkgs []string, install string) {
 		return []seedFile{
 			{"/usr/local/sbin/vpner-incy-install", "0755", incyInstall},
 			{"/etc/polkit-1/rules.d/49-vpner-incy.rules", "0644", incyPolkit},
+			{incyResetPath, "0755", incyReset},
 			{"/usr/local/bin/vpner-incy", "0755", incySession},
 			{"/etc/xdg/autostart/vpner-incy.desktop", "0644", incyAutostart},
 		}, []string{"curl", "ca-certificates", "python3"}, "/usr/local/sbin/vpner-incy-install"

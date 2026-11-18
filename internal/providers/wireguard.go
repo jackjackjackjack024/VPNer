@@ -325,18 +325,18 @@ func (p wireguardProvider) Import(filename, data string) (*config.Connection, er
 	return c, nil
 }
 
-// decodeAmneziaKey unpacks an AmneziaVPN "vpn://" share key and extracts a
-// WireGuard/AmneziaWG config from it.
-func decodeAmneziaKey(key string) (conf, desc string, err error) {
+// amneziaKeyRoot unpacks an AmneziaVPN "vpn://" key into its JSON.
+func amneziaKeyRoot(key string) (map[string]any, error) {
 	raw := strings.TrimSpace(strings.TrimPrefix(key, "vpn://"))
 	var b []byte
+	var err error
 	for _, enc := range []*base64.Encoding{base64.RawURLEncoding, base64.URLEncoding, base64.RawStdEncoding, base64.StdEncoding} {
 		if b, err = enc.DecodeString(raw); err == nil {
 			break
 		}
 	}
 	if err != nil {
-		return "", "", errors.New(i18n.T("providers.vpnKeyInvalidBase64"))
+		return nil, errors.New(i18n.T("providers.vpnKeyInvalidBase64"))
 	}
 	var js []byte
 	if len(b) > 4 {
@@ -355,9 +355,22 @@ func decodeAmneziaKey(key string) (conf, desc string, err error) {
 	}
 	var root any
 	if err := json.Unmarshal(js, &root); err != nil {
-		return "", "", fmt.Errorf(i18n.T("providers.vpnKeyNotJson"), err)
+		return nil, fmt.Errorf(i18n.T("providers.vpnKeyNotJson"), err)
 	}
-	rootMap, _ := root.(map[string]any)
+	m, _ := root.(map[string]any)
+	if m == nil {
+		return nil, errors.New(i18n.T("providers.vpnKeyInvalidBase64"))
+	}
+	return m, nil
+}
+
+// decodeAmneziaKey unpacks an AmneziaVPN "vpn://" share key and extracts a
+// WireGuard/AmneziaWG config from it.
+func decodeAmneziaKey(key string) (conf, desc string, err error) {
+	rootMap, err := amneziaKeyRoot(key)
+	if err != nil {
+		return "", "", err
+	}
 	if d, ok := rootMap["description"].(string); ok {
 		desc = d
 	}
@@ -429,7 +442,7 @@ func decodeAmneziaKey(key string) (conf, desc string, err error) {
 			}
 		}
 	}
-	walk(root)
+	walk(rootMap)
 	if found == "" {
 		if _, ok := rootMap["userName"]; ok {
 			return "", desc, errors.New(i18n.T("providers.thisIsFullAccessKey"))

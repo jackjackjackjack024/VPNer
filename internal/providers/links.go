@@ -38,6 +38,13 @@ func (linkProvider) Fields() []Field {
 var linkSchemes = []string{"vless://", "vmess://", "trojan://", "ss://", "hysteria2://", "hy2://", "tuic://", "socks5://", "socks://", "http://", "https://"}
 
 func (linkProvider) Detect(_ string, data string) bool {
+	// XRay access from the AmneziaVPN app (see amneziaxray.go)
+	if _, ok, _ := amneziaXRayLink(data); ok {
+		return true
+	}
+	if xrayJSON(data) != nil {
+		return true
+	}
 	low := strings.ToLower(strings.TrimSpace(data))
 	for _, s := range linkSchemes {
 		if strings.HasPrefix(low, s) {
@@ -49,6 +56,16 @@ func (linkProvider) Detect(_ string, data string) bool {
 
 func (p linkProvider) Import(_ string, data string) (*config.Connection, error) {
 	link := strings.TrimSpace(data)
+	if l, ok, err := amneziaXRayLink(data); ok {
+		if err != nil {
+			return nil, err
+		}
+		link = l
+	} else if cfg := xrayJSON(data); cfg != nil {
+		if link, err = xrayConfigLink(cfg, ""); err != nil {
+			return nil, err
+		}
+	}
 	m, name, err := parseLink(link)
 	if err != nil {
 		return nil, err

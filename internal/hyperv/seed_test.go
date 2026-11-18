@@ -193,3 +193,26 @@ func TestIncyScriptsParse(t *testing.T) {
 		}
 	}
 }
+
+// INCY that cannot start its core is restarted with its helper: the session
+// script watches the log, and polkit lets it run only VPNer's reset script.
+func TestIncyReset(t *testing.T) {
+	files, _, _ := appFiles(AppIncy)
+	have := false
+	for _, f := range files {
+		if f.Path == incyResetPath && f.Mode == "0755" && strings.Contains(f.Content, "incy-worker") {
+			have = true
+		}
+	}
+	if !have {
+		t.Fatal("no reset script")
+	}
+	if !strings.Contains(incyPolkit, `action.lookup("program") == "`+incyResetPath+`"`) {
+		t.Error("polkit does not allow exactly the reset script")
+	}
+	for _, s := range []string{"core startup failed", "pkexec " + incyResetPath, "pause=$((pause * 2))"} {
+		if !strings.Contains(incySession, s) {
+			t.Errorf("session script lacks %q", s)
+		}
+	}
+}

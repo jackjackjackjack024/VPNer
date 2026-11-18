@@ -36,6 +36,31 @@ type Config struct {
 	// Appearance is the UI look (theme, colors, fonts, user variables). Only
 	// the interface reads it, so it is kept as opaque JSON.
 	Appearance json.RawMessage `json:"appearance,omitempty"`
+	// PresetID and PresetName name the active preset: the connections,
+	// rules, DNS and settings above. Empty until the user makes a second one.
+	PresetID   string `json:"presetId,omitempty"`
+	PresetName string `json:"presetName,omitempty"`
+	// Presets are the other saved setups, not running.
+	Presets []Preset `json:"presets,omitempty"`
+}
+
+// Preset is a whole VPNer setup kept under a name: connections, rules, DNS
+// and routing settings. The look of the window and the settings of the
+// program itself (language, autostart, window port) are not part of it.
+type Preset struct {
+	ID          string       `json:"id"`
+	Name        string       `json:"name"`
+	Connections []Connection `json:"connections"`
+	Rules       []Rule       `json:"rules"`
+	Settings    Settings     `json:"settings"`
+	DNS         DNS          `json:"dns"`
+}
+
+// KeepAppSettings puts the settings of the program itself from cur into s:
+// they stay when another preset is applied.
+func KeepAppSettings(s *Settings, cur Settings) {
+	s.Language, s.Autostart, s.UIPort, s.StartOnLaunch = cur.Language, cur.Autostart, cur.UIPort, cur.StartOnLaunch
+	s.DirectDNS = nil
 }
 
 // Connection is one VPN/proxy/gateway. Params are type specific and described
@@ -299,6 +324,24 @@ func (s *Store) Load() (*Config, error) {
 			cfg.Connections[i].Params = map[string]string{}
 		}
 	}
+	for p := range cfg.Presets {
+		for i := range cfg.Presets[p].Connections {
+			c := &cfg.Presets[p].Connections[i]
+			for k, v := range c.Secrets {
+				dec, err := unprotect(v)
+				if err != nil {
+					return nil, fmt.Errorf(i18n.T("config.couldNotDecryptSecret"), c.Name, k, err)
+				}
+				c.Secrets[k] = dec
+			}
+			if c.Params == nil {
+				c.Params = map[string]string{}
+			}
+		}
+		if cfg.Presets[p].Rules == nil {
+			cfg.Presets[p].Rules = []Rule{}
+		}
+	}
 	if cfg.Rules == nil {
 		cfg.Rules = []Rule{}
 	}
@@ -315,17 +358,26 @@ func (s *Store) Save(cfg *Config) error {
 	defer s.mu.Unlock()
 	out := cfg.Clone()
 	out.Version = CurrentVersion
+	conns := []*Connection{}
 	for i := range out.Connections {
-		for k, v := range out.Connections[i].Secrets {
+		conns = append(conns, &out.Connections[i])
+	}
+	for p := range out.Presets {
+		for i := range out.Presets[p].Connections {
+			conns = append(conns, &out.Presets[p].Connections[i])
+		}
+	}
+	for _, c := range conns {
+		for k, v := range c.Secrets {
 			if v == "" {
-				delete(out.Connections[i].Secrets, k)
+				delete(c.Secrets, k)
 				continue
 			}
 			enc, err := protect(v)
 			if err != nil {
 				return err
 			}
-			out.Connections[i].Secrets[k] = enc
+			c.Secrets[k] = enc
 		}
 	}
 	b, err := json.MarshalIndent(out, "", "  ")
