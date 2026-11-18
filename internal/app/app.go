@@ -41,26 +41,31 @@ type App struct {
 
 	ops sync.Mutex // serialises lifecycle operations
 
-	mu          sync.Mutex
-	cfg         *config.Config
-	running     bool
-	starting    bool
-	lastError   string
-	setup       *SetupState
-	engine      *engine.Mihomo
-	tun         *tunnelProc // WireGuard/AmneziaWG tunnels, see tunnels.go
-	tunMu       sync.Mutex  // serialises syncTunnels
-	wsl         *wslhost.Session
-	wslReady    bool
-	endpoints   map[string]*endpoint
-	vms         map[string]*vmRuntime
-	health      map[string]*nativeHealth
-	quitAsk     bool // the user asked to quit while VPNs were running
-	foreign     []string
-	monStop     chan struct{}
-	vmEndpoints map[string]engine.LocalEndpoint
-	testPorts   map[string]int
-	conns       map[string]*connRuntime
+	mu        sync.Mutex
+	cfg       *config.Config
+	running   bool
+	starting  bool
+	lastError string
+	setup     *SetupState
+	engine    *engine.Mihomo
+	// WireGuard/AmneziaWG tunnels, one process each (see tunnels.go), the
+	// SOCKS5 port of each (stable for the session) and their credentials.
+	tuns             map[string]*tunnelProc
+	tunPorts         map[string]int
+	tunUser, tunPass string
+	tunMu            sync.Mutex // serialises syncTunnels
+	wsl              *wslhost.Session
+	wslReady         bool
+	endpoints        map[string]*endpoint
+	vms              map[string]*vmRuntime
+	health           map[string]*nativeHealth
+	vmHealth         map[string]*vmHealth // VMs whose VPN app passes nothing, see vmwatch.go
+	quitAsk          bool                 // the user asked to quit while VPNs were running
+	foreign          []string
+	monStop          chan struct{}
+	vmEndpoints      map[string]engine.LocalEndpoint
+	testPorts        map[string]int
+	conns            map[string]*connRuntime
 	// connecting: connections whose Connect is running, so that a second
 	// click while the first one still waits (the engine downloading, a VM
 	// being created) does not start them twice.
@@ -131,6 +136,8 @@ func New(dataDir string) (*App, error) {
 		vms:         map[string]*vmRuntime{},
 		health:      map[string]*nativeHealth{},
 		vmEndpoints: map[string]engine.LocalEndpoint{},
+		tuns:        map[string]*tunnelProc{},
+		tunPorts:    map[string]int{},
 		testPorts:   map[string]int{},
 		conns:       map[string]*connRuntime{},
 		typedPass:   map[string]string{},
@@ -274,12 +281,18 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 				c.Secrets[k] = v
 			}
 		}
-		for _, k := range []string{"clientId", "clientIp", "hostKey"} {
+		for _, k := range []string{"clientId", "clientIp", "hostKey", engine.ParamRealityHello, ParamXRayOf} {
 			if _, ok := c.Params[k]; !ok && old.Params[k] != "" {
 				c.Params[k] = old.Params[k]
 			}
 		}
 		if keyChanged {
+			// A new key gets a new user on the server: the one VPNer made
+			// with the old key is removed, so users do not pile up there.
+			// Before the new one is added: both rewrite the server config.
+			if !usedByPresets(cfg, c.ID) { // another preset still uses that user
+				a.removeAmneziaClient(*old)
+			}
 			delete(c.Secrets, "config")
 			delete(c.Params, "clientId")
 			delete(c.Params, "hostKey")
@@ -301,7 +314,11 @@ func (a *App) SaveConnection(c config.Connection) (string, error) {
 
 func (a *App) DeleteConnection(id string) error {
 	a.disconnect(id, false)
-	a.removeVM(id)
+	// another preset with the same connection keeps its VM and server users
+	shared := usedByPresets(a.Config(), id)
+	if !shared {
+		a.removeVM(id)
+	}
 	a.ops.Lock()
 	defer a.ops.Unlock()
 	cfg := a.Config()
@@ -312,9 +329,11 @@ func (a *App) DeleteConnection(id string) error {
 		if c.ID == id {
 			name = c.Name
 			deleted = c
-			go a.removeAmneziaClient(c)
-			if c.Type == config.TypeChain {
-				go a.removeChainClients(c, cfg.Clone())
+			if !shared {
+				go a.removeAmneziaClient(c)
+				if c.Type == config.TypeChain {
+					go a.removeChainClients(c, cfg.Clone())
+				}
 			}
 			continue
 		}
@@ -627,7 +646,7 @@ func (a *App) startLocked() error {
 	a.engine = m
 	a.mu.Unlock()
 	a.progress(i18n.T("app.startingTunnels"), 0, -1)
-	if err := a.syncTunnels(false); err != nil {
+	if err := a.syncTunnels(nil); err != nil {
 		a.Log.Errorf("app", i18n.T("app.tunnelProcessTunnelsWillRun"), err)
 	}
 	cfg := a.Config()
@@ -650,6 +669,7 @@ func (a *App) startLocked() error {
 	a.mu.Lock()
 	a.monStop = make(chan struct{})
 	a.health = map[string]*nativeHealth{}
+	a.vmHealth = map[string]*vmHealth{}
 	stop := a.monStop
 	a.mu.Unlock()
 	go a.monitor(m, stop)
@@ -780,7 +800,7 @@ func (a *App) applyEngine() error {
 	if m == nil || !running {
 		return nil
 	}
-	if err := a.syncTunnels(false); err != nil {
+	if err := a.syncTunnels(nil); err != nil {
 		a.Log.Errorf("app", i18n.T("app.tunnelProcess"), err)
 	}
 	cfg := a.Config()
@@ -884,15 +904,6 @@ func (a *App) testPortLocked(name string) int {
 	}
 	a.testPorts[name] = p
 	return p
-}
-
-func freePort() (int, error) {
-	l, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		return 0, err
-	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
 }
 
 // ---- snapshot for the UI ----

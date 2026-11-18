@@ -29,6 +29,10 @@ type Profile struct {
 	Settings    *config.Settings    `json:"settings,omitempty"`
 	DNS         *config.DNS         `json:"dns,omitempty"`
 	Appearance  json.RawMessage     `json:"appearance,omitempty"`
+	// Name: the profile is one preset of VPNer, exported by itself.
+	Name string `json:"name,omitempty"`
+	// Presets: the file holds several presets (all exported together).
+	Presets []Profile `json:"presets,omitempty"`
 }
 
 // Result is what an import would add. Connection ids are fresh; rule targets

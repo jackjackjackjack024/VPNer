@@ -136,6 +136,50 @@ func TestOutboundFor(t *testing.T) {
 	}
 }
 
+// A DNS server reached through a connection that is not running (a VM still
+// starting) is left out: mihomo would take "#<id>" for a network interface and
+// fail every query, leaving the computer without DNS. Once the connection
+// runs, the server is used again.
+func TestDNSViaConnectionNotRunning(t *testing.T) {
+	cfg := testConfig()
+	cfg.DNS.Servers = append(cfg.DNS.Servers, config.DNSServer{ID: "viawork", Name: "DoH via work", Address: "https://dns.example/dns-query", Via: "cwork"})
+	cfg.DNS.Default = []string{"viawork"}
+	cfg.DNS.Rules = append(cfg.DNS.Rules, config.DNSRule{Enabled: true, Kind: "domain-suffix", Values: []string{"corp.example"}, Server: "viawork"})
+	if err := cfg.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	gen := func(eps map[string]LocalEndpoint) map[string]any {
+		m, err := Generate(GenInput{Cfg: cfg, ControllerPort: 9090, Secret: "s", Endpoints: eps})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m["dns"].(map[string]any)
+	}
+
+	// cwork has no endpoint yet: not running
+	dns := gen(nil)
+	if ns := strings.Join(dns["nameserver"].([]string), " "); ns != "system" {
+		t.Errorf("nameserver while the connection is down = %q, want system", ns)
+	}
+	if pol, _ := dns["nameserver-policy"].(map[string]any); pol["+.corp.example"] != nil {
+		t.Errorf("a DNS rule through a connection that is down must fall to the default servers: %v", pol["+.corp.example"])
+	}
+	for _, ns := range dns["nameserver"].([]string) {
+		if strings.Contains(ns, "#cwork") {
+			t.Error("#cwork without the outbound is taken for an interface")
+		}
+	}
+
+	// running: queries go through it again
+	dns = gen(map[string]LocalEndpoint{"cwork": {Port: 30001, User: "u", Pass: "p"}})
+	if ns := strings.Join(dns["nameserver"].([]string), " "); ns != "https://dns.example/dns-query#cwork" {
+		t.Errorf("nameserver while the connection runs = %q", ns)
+	}
+	if pol := dns["nameserver-policy"].(map[string]any); pol["+.corp.example"] == nil {
+		t.Error("the DNS rule must use its server again")
+	}
+}
+
 func TestDNSValidation(t *testing.T) {
 	cfg := testConfig()
 	cfg.DNS.Servers = append(cfg.DNS.Servers, config.DNSServer{ID: "bad", Name: "bad", Address: "dns.example.com"})

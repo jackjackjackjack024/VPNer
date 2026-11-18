@@ -188,6 +188,16 @@ func Start(name string) error {
 	return err
 }
 
+// Restart shuts the VM down through its integration services (the guest
+// shuts down cleanly), turns it off if it does not, and starts it again.
+func Restart(name string) error {
+	_, err := ps(fmt.Sprintf(`$v = Get-VM -Name %s -ErrorAction Stop
+if ($v.State -eq 'Running') { Stop-VM -VM $v -Force -ErrorAction SilentlyContinue }
+if ((Get-VM -Name %[1]s).State -ne 'Off') { Stop-VM -VM $v -TurnOff -Force }
+Start-VM -VM $v`, q(name)))
+	return err
+}
+
 // Save suspends the VM to disk (fast resume, VPN app state is kept).
 func Save(name string) error {
 	_, err := ps(fmt.Sprintf(`$v = Get-VM -Name %s -ErrorAction SilentlyContinue; if ($v -and $v.State -eq 'Running') { Save-VM -VM $v }`, q(name)))

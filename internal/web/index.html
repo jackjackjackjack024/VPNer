@@ -68,7 +68,7 @@ header.top { position: sticky; top: 0; z-index: 5; background: var(--bg); paddin
 .dot.ok { background: var(--ok); box-shadow: 0 0 0 4px var(--ok-weak); }
 .dot.warn { background: var(--warn); box-shadow: 0 0 0 4px var(--warn-weak); }
 .dot.bad { background: var(--bad); box-shadow: 0 0 0 4px var(--bad-weak); }
-.content { padding: 20px 24px 40px; max-width: 1180px; width: 100%; }
+.content { padding: 20px 24px 40px; width: 100%; }
 h2 { font-size: 20px; margin: 0 0 4px; font-weight: 650; }
 .lead { color: var(--muted); margin: 0 0 18px; max-width: 760px; }
 .btn { border: 1px solid var(--line); background: var(--panel); padding: 7px 14px; border-radius: var(--r-btn); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
@@ -390,7 +390,7 @@ button.picker:hover { border-color: var(--accent); }
 .cp-sw button { aspect-ratio: 1; padding: 0; border: 1px solid var(--line); border-radius: max(2px, calc(var(--r-btn) * .5)); background: var(--sw); cursor: pointer; }
 .cp-sw button:hover { outline: 2px solid var(--accent); outline-offset: 1px; }
 :root[data-theme="glass"] .cpop { background: var(--glass-strong); backdrop-filter: blur(28px) saturate(1.6); border-color: var(--glass-line); }
-:root[data-theme="cli"] .cpop { border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame-hi) 14 8 / 14px 8px round; background-clip: padding-box; box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 20%, transparent); padding: 4px 6px; }
+:root[data-theme="cli"] .cpop { border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame-hi) var(--cli-cut, 14 8) / 14px 8px round; background-clip: padding-box; box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 20%, transparent); padding: 4px 6px; }
 :root[data-theme="cli"] .cp-sv, :root[data-theme="cli"] .cp-hue, :root[data-theme="cli"] .cp-sw button, :root[data-theme="cli"] .cp-now, :root[data-theme="cli"] button.picker { border-radius: 0; }
 :root[data-theme="cli"] .cp-knob { border-radius: 0; width: 10px; height: 10px; }
 :root[data-theme="cli"] .cp-rgb span::before { content: "["; } :root[data-theme="cli"] .cp-rgb span::after { content: "]"; }
@@ -434,7 +434,7 @@ input[type=range]:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px va
   :root[data-theme="glass"] ::picker(select) { background: var(--glass-strong); backdrop-filter: blur(28px) saturate(1.6); border-color: var(--glass-line); box-shadow: 0 16px 40px rgba(0,0,0,.25); }
   :root[data-theme="glass"] select option:checked { background: color-mix(in srgb, var(--text) 8%, transparent); color: var(--text); }
   :root[data-theme="glass"] select option:checked::before { content: ""; width: 3px; height: 14px; border-radius: 3px; background: var(--accent); margin-left: -6px; }
-  :root[data-theme="cli"] ::picker(select) { border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame-hi) 14 8 / 14px 8px round;
+  :root[data-theme="cli"] ::picker(select) { border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame-hi) var(--cli-cut, 14 8) / 14px 8px round;
     background-clip: padding-box; padding: 0 2px; box-shadow: 0 0 30px color-mix(in srgb, var(--accent) 18%, transparent); }
   :root[data-theme="cli"] select::picker-icon { mask: none; background: none; width: auto; height: auto; content: "▾"; color: var(--accent); }
   :root[data-theme="cli"] select option { border-radius: 0; padding: 3px 8px; }
@@ -507,6 +507,43 @@ body.setup .content { max-width: 820px; margin: 0 auto; padding: 28px 32px; }
 :root.no-anim *, :root.no-anim *::before, :root.no-anim *::after { animation: none !important; transition: none !important; }
 :root.no-anim .progress.indet > div { animation: indet 1.2s infinite ease-in-out !important; } /* a busy indicator is not decoration */
 
+.presets { display: flex; flex-direction: column; gap: 6px; }
+.preset-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
+.preset-row.on { border-color: var(--accent); }
+.preset-row.conflict { border-color: var(--warn); margin-bottom: 6px; }
+.preset-row .grow { flex: 1; min-width: 0; }
+/* panels side by side on a wide window, so they are not stretched thin */
+.panels { columns: 2 520px; column-gap: 14px; }
+.panels > .panel { break-inside: avoid; display: inline-block; width: 100%; }
+/* home screen: the routing switch in the middle, the rest at a glance */
+.home { display: flex; flex-direction: column; align-items: center; gap: 22px; padding-top: 12px; }
+.home-hero { display: flex; flex-direction: column; align-items: center; gap: 10px; text-align: center; }
+.power-orb { width: 168px; height: 168px; border-radius: 50%; border: 2px solid var(--line); background: var(--panel); color: var(--text);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; cursor: pointer; font: 600 15px var(--font);
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--panel2) 60%, transparent); transition: box-shadow .25s, border-color .25s, transform .1s; }
+.power-orb:hover { transform: scale(1.03); }
+.power-orb:active { transform: scale(.98); }
+.power-orb svg { width: 44px; height: 44px; }
+.power-orb.off { background: var(--accent); border-color: var(--accent); color: var(--on-accent); box-shadow: 0 0 0 10px var(--accent-weak); }
+.power-orb.on { border-color: var(--ok); color: var(--ok); box-shadow: 0 0 0 10px var(--ok-weak); }
+.power-orb.busy { border-color: var(--warn); color: var(--warn); box-shadow: 0 0 0 10px var(--warn-weak); }
+.home-title { font-size: 20px; font-weight: 650; }
+.home-sub { color: var(--muted); }
+.home-grid { width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 14px; }
+.home-grid .panel { margin: 0; display: flex; flex-direction: column; gap: 8px; }
+.home-grid .panel h3 { margin: 0; display: flex; align-items: center; gap: 8px; }
+.home-grid .panel h3 .btn { margin-left: auto; }
+.home-conn { display: flex; align-items: center; gap: 8px; min-width: 0; padding: 3px 0; cursor: pointer; }
+.home-conn span.n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-conn small { color: var(--muted); white-space: nowrap; }
+main.on-home #power, main.on-home header.top .status { display: none; }
+main.on-home header.top { border-bottom-color: transparent; background: transparent; padding-bottom: 0; }
+main.on-home .content { flex: 1; display: flex; }
+main.on-home .home { flex: 1; justify-content: center; padding-bottom: 6vh; }
+:root[data-theme="cli"] .power-orb { border-radius: 0; border-style: solid; border-color: transparent; border-width: 14px 8px;
+  border-image: var(--cli-frame) var(--cli-cut, 14 8) / 14px 8px round; background-clip: padding-box; box-shadow: none; }
+:root[data-theme="cli"] .power-orb.off { border-image-source: var(--cli-frame-hi); }
+:root[data-theme="cli"] .power-orb b::before { content: "[ "; } :root[data-theme="cli"] .power-orb b::after { content: " ]"; }
 /* ---------- theme: CLI / terminal ----------
    Blocks are framed with text characters (border-image built in JS from the
    chosen frame style and the current colors: --cli-frame, --cli-frame-hi,
@@ -540,7 +577,7 @@ body.setup .content { max-width: 820px; margin: 0 auto; padding: 28px 32px; }
 :root[data-theme="cli"] .table-wrap, :root[data-theme="cli"] .logs, :root[data-theme="cli"] .type, :root[data-theme="cli"] .theme-card,
 :root[data-theme="cli"] .modal, :root[data-theme="cli"] .ctx-menu, :root[data-theme="cli"] .toast, :root[data-theme="cli"] .drop,
 :root[data-theme="cli"] .empty, :root[data-theme="cli"] .list {
-  border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame) 14 8 / 14px 8px round;
+  border-style: solid; border-color: transparent; border-width: 14px 8px; border-image: var(--cli-frame) var(--cli-cut, 14 8) / 14px 8px round;
   background: color-mix(in srgb, var(--panel) 92%, transparent); background-clip: padding-box; box-shadow: none; }
 :root[data-theme="cli"] .card:hover, :root[data-theme="cli"] .theme-card:hover, :root[data-theme="cli"] .theme-card.on, :root[data-theme="cli"] .type:hover,
 :root[data-theme="cli"] .modal, :root[data-theme="cli"] .rule.moved, :root[data-theme="cli"] .drop.over, :root[data-theme="cli"] .rule-ghost { border-image-source: var(--cli-frame-hi); }
@@ -686,6 +723,7 @@ body.setup .content { max-width: 820px; margin: 0 auto; padding: 28px 32px; }
   <div class="scrim" id="scrim"></div>
   <nav id="nav" data-i18n-aria-label="ui.sections">
     <div class="brand"><svg viewBox="0 0 32 32"><rect width="32" height="32" rx="8"/><path d="M9 10l7 13 7-13" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>VPNer</div>
+    <a data-tab="home"><span data-i18n="ui.home.title"></span></a>
     <a data-tab="conns"><span data-i18n="ui.connections"></span> <span class="count" id="cnt-conns"></span></a>
     <a data-tab="rules"><span data-i18n="ui.rules"></span> <span class="count" id="cnt-rules"></span></a>
     <a data-tab="dns">DNS</a>
@@ -758,7 +796,7 @@ const fmtBytes = n => n < 1024 ? n + tr("ui.b") : n < 1048576 ? (n/1024).toFixed
 const ago = ts => { if (!ts) return ""; const s = Math.max(0, Math.floor(Date.now()/1000 - ts)); return s < 60 ? s + tr("ui.s") : s < 3600 ? Math.floor(s/60) + tr("ui.min") : Math.floor(s/3600) + tr("ui.h") + Math.floor(s%3600/60) + tr("ui.min"); };
 
 // ---------- state ----------
-const S = { tab: "conns", state: null, cfg: null, providers: [], logs: [], rulesDraft: null, rulesDirty: false, live: null, leak: null, info: {} };
+const S = { tab: "home", state: null, cfg: null, providers: [], logs: [], rulesDraft: null, rulesDirty: false, live: null, leak: null, info: {} };
 const RUNTIME = { native: ["native", tr("ui.builtIn")], wsl: ["wsl", tr("ui.wslContainer")], vm: ["vm", tr("ui.virtualMachine")], chain: ["chain", tr("ui.chain.badge")] };
 // badgeOf: a chain is shown as a chain, not by the runtime it shares.
 const badgeOf = (type, runtime) => type === "chain" ? RUNTIME.chain : (RUNTIME[runtime] || ["", runtime || ""]);
@@ -769,13 +807,14 @@ const STATES = {
 };
 // Ready-made rule sets: sites (with subdomains) and desktop apps.
 const RULE_PRESETS = [
-  { id: "ai", title: tr("ui.aiClaudeChatgptGrok"), note: tr("ui.sitesApisAndAppsOf"),
-    rules: [
-      { kind: "domain-suffix", values: ["anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com", "clau.de",
-        "openai.com", "chatgpt.com", "chat.com", "oaistatic.com", "oaiusercontent.com", "sora.com", "livekit.cloud",
-        "grok.com", "x.ai"] },
-      { kind: "process", values: ["Claude.exe", "ChatGPT.exe"] },
-    ] },
+  { id: "claude", title: "Claude", note: "claude.ai, anthropic.com, Claude.exe",
+    rules: [{ kind: "domain-suffix", values: ["anthropic.com", "claude.ai", "claude.com", "claudeusercontent.com", "clau.de"] },
+            { kind: "process", values: ["Claude.exe"] }] },
+  { id: "chatgpt", title: "ChatGPT", note: "chatgpt.com, openai.com, Sora, ChatGPT.exe",
+    rules: [{ kind: "domain-suffix", values: ["openai.com", "chatgpt.com", "chat.com", "oaistatic.com", "oaiusercontent.com", "sora.com", "livekit.cloud"] },
+            { kind: "process", values: ["ChatGPT.exe"] }] },
+  { id: "grok", title: "Grok", note: "grok.com, x.ai",
+    rules: [{ kind: "domain-suffix", values: ["grok.com", "x.ai"] }] },
   { id: "gemini", title: "Google Gemini", note: "gemini.google.com, AI Studio",
     rules: [{ kind: "domain-suffix", values: ["gemini.google.com", "aistudio.google.com", "generativelanguage.googleapis.com", "bard.google.com"] }] },
   { id: "youtube", title: "YouTube", note: tr("ui.siteAndVideoStream"),
@@ -786,8 +825,12 @@ const RULE_PRESETS = [
   { id: "discord", title: "Discord", note: tr("ui.siteVoiceAndApp"),
     rules: [{ kind: "domain-suffix", values: ["discord.com", "discord.gg", "discordapp.com", "discordapp.net", "discord.media", "discordcdn.com"] },
             { kind: "process", values: ["Discord.exe"] }] },
-  { id: "meta", title: "Instagram, Facebook, WhatsApp", note: tr("ui.metaServices"),
-    rules: [{ kind: "domain-suffix", values: ["instagram.com", "cdninstagram.com", "facebook.com", "fbcdn.net", "fb.com", "whatsapp.com", "whatsapp.net", "meta.com"] }] },
+  { id: "instagram", title: "Instagram", note: "instagram.com",
+    rules: [{ kind: "domain-suffix", values: ["instagram.com", "cdninstagram.com", "fbcdn.net"] }] },
+  { id: "facebook", title: "Facebook", note: "facebook.com, Messenger",
+    rules: [{ kind: "domain-suffix", values: ["facebook.com", "fb.com", "fbcdn.net", "messenger.com", "meta.com"] }] },
+  { id: "whatsapp", title: "WhatsApp", note: "whatsapp.com",
+    rules: [{ kind: "domain-suffix", values: ["whatsapp.com", "whatsapp.net"] }] },
   { id: "x", title: "X (Twitter)", note: "x.com, twitter.com",
     rules: [{ kind: "domain-suffix", values: ["x.com", "twitter.com", "twimg.com", "t.co"] }] },
 ];
@@ -863,6 +906,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") setNav(false
 let apReady = false;
 async function loadConfig() {
   S.cfg = await api("GET", "/api/config");
+  S.presets = null; // the home screen asks again
   if (!S.rulesDirty) S.rulesDraft = structuredClone(S.cfg.rules || []);
   if (!apReady) { apReady = true; apLoad(); } else apApply();
 }
@@ -877,7 +921,7 @@ async function boot() {
     return;
   }
   connectEvents();
-  setTab(location.search.slice(1) || "conns");
+  setTab(location.search.slice(1) || "home");
   decWatch();
 }
 function connectEvents() {
@@ -894,9 +938,9 @@ function onState(prev) {
   const needCfg = !prev || (prev.connections || []).length !== (S.state.connections || []).length || prev.configRev !== S.state.configRev;
   if (needCfg) loadConfig().then(() => {
     if (S.tab === "dns" && !S.dnsDirty) { S.dnsDraft = null; render(); }
-    else if (["conns", "rules"].includes(S.tab)) render();
+    else if (["conns", "rules", "home"].includes(S.tab)) render();
   });
-  else if (S.tab === "conns" || S.tab === "check") render();
+  else if (S.tab === "conns" || S.tab === "check" || S.tab === "home") render();
   if (S.state.quitAsk) showQuitConfirm();
   const p = (S.state.connections || []).find(c => c.prompt);
   if (p && promptOpen !== p.id + p.prompt.text) showPrompt(p);
@@ -929,10 +973,11 @@ function renderHeader() {
   if (!st.running && st.killSwitch) b += `<div class="banner warn">${tr("ui.systemKillSwitchStillBlocks")} <button class="btn small" onclick="restoreNet()">${tr("ui.restoreNetwork")}</button></div>`;
   $("#banners").innerHTML = b;
 }
-$("#power").onclick = async () => {
+async function togglePower() {
   if (S.state && (S.state.running || S.state.starting)) await act(() => api("POST", "/api/stop"));
   else await act(() => api("POST", "/api/start"));
-};
+}
+$("#power").onclick = togglePower;
 $("#quit").onclick = () => {
   if (S.state && (S.state.running || S.state.starting)) showQuitConfirm();
   else doQuit();
@@ -1038,10 +1083,14 @@ const apParam = id => AP_PARAMS.find(p => p.id === id) || connParams().find(p =>
 const apTheme = () => THEMES.find(t => t.id === AP.theme) || THEMES[0];
 const fxOn = id => AP.anim !== false && AP.fx[id] !== false && !matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-// Character frames of the CLI theme: a 3x3 cell SVG (corners, edges) used
-// as border-image, drawn in the current colors.
+// Character frames of the CLI theme: a 3x3 cell image (corners, edges)
+// used as border-image, drawn in the current colors. It is drawn on a
+// canvas: Edge leaves out the edge tiles of an SVG border-image with text
+// in it, so only the corners showed. The canvas is drawn at FRAME_SCALE for
+// sharp text; --cli-cut gives border-image-slice in its pixels.
 const FRAMES = { ascii: "+-+||+-+", line: "┌─┐││└─┘", double: "╔═╗║║╚═╝" };
 const FRAME_CW = 8, FRAME_CH = 14;
+const FRAME_SCALE = Math.max(2, Math.ceil(window.devicePixelRatio || 1));
 function apColor(cssVar) {
   const probe = document.createElement("div");
   probe.style.color = `var(${cssVar})`;
@@ -1051,16 +1100,21 @@ function apColor(cssVar) {
   return c;
 }
 function frameUrl(cells, color) {
-  const text = cells.map(([c, r, ch]) => `<text x='${c * FRAME_CW + FRAME_CW / 2}' y='${r * FRAME_CH + FRAME_CH / 2}'>${ch}</text>`).join("");
   const w = Math.max(...cells.map(x => x[0])) + 1, h = Math.max(...cells.map(x => x[1])) + 1;
-  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='${w * FRAME_CW}' height='${h * FRAME_CH}'><g font-family='Cascadia Mono, Consolas, monospace' font-size='13' fill='${color}' text-anchor='middle' dominant-baseline='central'>${text}</g></svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
+  const cv = document.createElement("canvas");
+  cv.width = w * FRAME_CW * FRAME_SCALE; cv.height = h * FRAME_CH * FRAME_SCALE;
+  const x = cv.getContext("2d");
+  x.scale(FRAME_SCALE, FRAME_SCALE);
+  x.font = "13px 'Cascadia Mono', Consolas, monospace";
+  x.fillStyle = color; x.textAlign = "center"; x.textBaseline = "middle";
+  for (const [c, r, ch] of cells) x.fillText(ch, c * FRAME_CW + FRAME_CW / 2, r * FRAME_CH + FRAME_CH / 2);
+  return `url("${cv.toDataURL()}")`;
 }
 function cliFrames() {
   const g = [...(FRAMES[AP.fx.frame] || FRAMES.ascii)];
   const box = color => frameUrl([[0, 0, g[0]], [1, 0, g[1]], [2, 0, g[2]], [0, 1, g[3]], [2, 1, g[4]], [0, 2, g[5]], [1, 2, g[6]], [2, 2, g[7]]], color);
   const frame = apColor("--frame");
-  return { "--cli-frame": box(frame), "--cli-frame-hi": box(apColor("--accent")),
+  return { "--cli-frame": box(frame), "--cli-frame-hi": box(apColor("--accent")), "--cli-cut": `${FRAME_CH * FRAME_SCALE} ${FRAME_CW * FRAME_SCALE}`,
     "--cli-hline": frameUrl([[0, 0, g[1]]], frame), "--cli-vline": frameUrl([[0, 0, g[3]]], frame) };
 }
 function apValueCss(kind, v) {
@@ -1660,8 +1714,71 @@ async function setTab(t) {
 }
 function render() {
   if (!S.cfg) return;
-  ({ conns: renderConns, rules: renderRules, dns: renderDNS, live: renderLive, check: renderCheck, logs: renderLogs, look: renderAppearance, settings: renderSettings })[S.tab]();
+  $("main").classList.toggle("on-home", S.tab === "home");
+  ({ home: renderHome, conns: renderConns, rules: renderRules, dns: renderDNS, live: renderLive, check: renderCheck, logs: renderLogs, look: renderAppearance, settings: renderSettings })[S.tab]();
   fxTypeHeading();
+}
+
+// ---------- home ----------
+// The routing switch in the middle; under it, at a glance, the preset (it
+// can be switched here), the connections and where the rest of the
+// traffic goes. The details stay in their sections.
+const POWER_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 6.8a8 8 0 1 0 11.4 0"/></svg>`;
+async function renderHome() {
+  if (!S.presets) {
+    S.presets = [];
+    api("GET", "/api/presets").then(l => { S.presets = l; if (S.tab === "home") renderHome(); }).catch(() => {});
+  }
+  const st = S.state || {};
+  const conns = S.cfg.connections || [];
+  const views = st.connections || [];
+  const on = st.running, busy = st.starting;
+  const problems = views.filter(c => ["down", "failed"].includes(c.state)).length;
+  const title = busy ? tr("ui.starting") : on ? tr("ui.routingIsOn") : tr("ui.routingIsOff");
+  const sub = busy ? (st.setup ? st.setup.stage : "") : on ? tr("ui.header.active", views.filter(c => c.state === "up" || c.state === "ready").length, conns.filter(c => c.enabled).length) + (problems ? tr("ui.header.problems", problems) : "") : tr("ui.allTrafficGoesAsUsual");
+  const orb = busy ? "busy" : on ? "on" : "off";
+  const presets = S.presets || [];
+  const cur = presets.find(p => p.active);
+  const fin = S.cfg.settings.finalTarget;
+  const finName = fin === "DIRECT" ? tr("ui.directNoVpn") : fin === "BLOCK" ? tr("ui.block") : ((connById(fin) || {}).name || fin);
+  const enabled = conns.filter(c => c.enabled);
+  const rows = enabled.map(c => {
+    const v = connView(c.id);
+    const [scls, stitle] = STATES[v.state] || ["muted", v.state || ""];
+    return `<div class="home-conn" data-goto="conns" style="--cc: var(--conn-${c.id})"><span class="dot ${scls === "muted" ? "" : scls}"></span><span class="n" title="${esc(c.name)}">${esc(c.name)}</span><small>${esc(stitle)}</small></div>`;
+  }).join("");
+  const rules = (S.cfg.rules || []).filter(r => r.enabled).length;
+  $("#view").innerHTML = `<div class="home">
+    <div class="home-hero">
+      <button class="power-orb ${orb}" id="home-power" aria-label="${on || busy ? tr("ui.turnOff") : tr("ui.turnOn")}">${POWER_ICON}<b>${on || busy ? tr("ui.turnOff") : tr("ui.turnOn")}</b></button>
+      <div class="home-title">${esc(title)}</div>
+      <div class="home-sub">${esc(sub)}</div>
+    </div>
+    <div class="home-grid">
+      <div class="panel"><h3>${tr("ui.home.preset")}</h3>
+        ${presets.length > 1 ? `<select id="home-preset" aria-label="${tr("ui.home.preset")}">${presets.map(p => `<option value="${p.id}" ${p.active ? "selected" : ""}>${esc(p.name)}</option>`).join("")}</select>`
+          : `<b>${esc(cur ? cur.name : "…")}</b>`}
+        <span class="help" style="color:var(--muted);font-size:12.5px">${tr("ui.home.presetHint")}</span>
+      </div>
+      <div class="panel"><h3>${tr("ui.connections")} <button class="btn small" data-goto="conns">${tr("ui.home.open")}</button></h3>
+        ${rows || `<span style="color:var(--muted)">${tr("ui.home.noConns")}</span>`}
+      </div>
+      <div class="panel"><h3>${tr("ui.rules")} <button class="btn small" data-goto="rules">${tr("ui.home.open")}</button></h3>
+        <div>${tr("ui.home.rulesOn", rules)}</div>
+        <div style="color:var(--muted);font-size:12.5px">${esc(tr("ui.home.final", finName))}</div>
+      </div>
+    </div>
+  </div>`;
+  $("#home-power").onclick = togglePower;
+  $$("[data-goto]").forEach(el => el.onclick = () => setTab(el.dataset.goto));
+  const sel = $("#home-preset");
+  if (sel) sel.onchange = async () => {
+    const p = presets.find(x => x.id === sel.value);
+    if (!p || p.active) return;
+    if (!await ask(tr("ui.presets.switchAsk", p.name), { title: tr("ui.home.preset"), ok: tr("ui.presets.activate") })) { sel.value = cur.id; return; }
+    await act(() => api("POST", `/api/presets/${p.id}/activate`)).catch(() => {});
+    S.rulesDirty = false; S.rulesDraft = null; await loadConfig(); render(); toast(tr("ui.presets.switched", p.name));
+  };
 }
 
 // ---------- connections ----------
@@ -1898,6 +2015,7 @@ function addConn() {
 // bigger (list, Clash config, profile, subscription) shows a summary.
 async function importFlow(src) {
   if (!(src.data || "").trim() && !(src.subscription || "").trim()) return toast(tr("ui.nothingToImport"), true);
+  if (src.data && isPresetFile(src.data)) { closeModal(); return importPresetsFlow(src.data); }
   const prev = await act(() => api("POST", "/api/import", { ...src, dry: true }));
   if (prev.kind === "single") {
     const r = await act(() => api("POST", "/api/import", src));
@@ -2099,6 +2217,51 @@ function chainIssues(d) {
   if (d.hops.length < 2) all.unshift(tr("ui.chain.needTwo"));
   return { hop, all, info };
 }
+// hopAdvice: what may stop a hop after the first from working, and what to
+// do about it. After a VPN program (in a VM, a container or behind a proxy)
+// it is louder: those often pass only TCP, and some (INCY) send connections
+// by the site name in them, which takes a REALITY hop with a decoy name to
+// the real site. An Amnezia server with full access gets the button that
+// sets XRay up by itself; for other keys the window says what to ask the
+// owner of the server. d.xrayBusy / d.xrayHelp hold the button's state.
+const adviceBox = (loud, body) => `<div ${loud ? `class="banner warn" style="display:block;white-space:normal;margin:6px 0 10px"`
+  : `style="background:var(--panel2);border-radius:var(--radius);padding:10px 14px;margin:6px 0 10px"`}>${body}</div>`;
+const adviceSteps = steps => `<div style="margin:8px 0 2px;font-weight:600">${tr("ui.chain.whatToDo")}</div><ol style="margin:4px 0 6px;padding-left:20px">${steps.map(x => `<li style="margin:2px 0">${esc(x)}</li>`).join("")}</ol>`;
+const adviceNote = text => `<p style="margin:6px 0 0;font-size:12.5px;opacity:.9">${esc(text)}</p>`;
+function hopAdvice(d) {
+  return d.hops.map((hid, i) => {
+    const h = connById(hid);
+    if (i === 0 || !h) return "";
+    const prev = connById(d.hops[i - 1]) || {};
+    const rt = providerOf(prev.type).runtime;
+    const afterApp = rt === "vm" || rt === "wsl" || prev.type === "upstream";
+    const net = h.net || {};
+    if (h.type === "amnezia-server") {
+      const busy = d.xrayBusy === hid, help = d.xrayHelp === hid;
+      return adviceBox(afterApp, `
+        <p style="margin:0 0 6px">${esc(tr("ui.chain.xrayLead", h.name))}</p>
+        <p style="margin:0 0 8px;font-size:12.5px;opacity:.85">${esc(tr("ui.chain.xrayWhat"))}</p>
+        ${help ? `<b>${tr("ui.chain.xrayMissingTitle")}</b><ol style="margin:6px 0 8px;padding-left:20px">${["ui.chain.xrayMissing1", "ui.chain.xrayMissing2", "ui.chain.xrayMissing3", "ui.chain.xrayMissing4"].map(k => `<li>${esc(tr(k))}</li>`).join("")}</ol>` : ""}
+        <button class="btn small${afterApp ? " primary" : ""}" data-xray="${hid}" ${busy || d.xrayBusy ? "disabled" : ""}>${busy ? tr("ui.chain.xrayWorking") : help ? tr("ui.chain.xrayRetry") : tr("ui.chain.xrayButton")}</button>`);
+    }
+    if (!afterApp) return "";
+    const self = net.selfName || "x-x-x-x.sslip.io";
+    if (net.udp) {
+      return adviceBox(true, `<b>${esc(tr("ui.chain.udpTitle", h.name, prev.name || ""))}</b>
+        <p style="margin:6px 0 0">${esc(tr("ui.chain.udpWhy"))}</p>
+        ${adviceSteps([tr("ui.chain.udpStep1"), tr("ui.chain.udpStep2"), tr("ui.chain.udpStep3", h.name)])}
+        ${adviceNote(tr("ui.chain.nameNote", self))}
+        ${adviceNote(tr("ui.chain.adminHint"))}`);
+    }
+    if (net.reality && !net.sniSelf) {
+      return adviceBox(true, `<b>${esc(tr("ui.chain.realityTitle", h.name, prev.name || ""))}</b>
+        <p style="margin:6px 0 0">${esc(tr("ui.chain.realityWhy", net.sni || "?"))}</p>
+        ${adviceSteps([tr("ui.chain.realityStep1", self), tr("ui.chain.realityStep2", h.name)])}
+        ${adviceNote(tr("ui.chain.adminHint"))}`);
+    }
+    return "";
+  }).join("");
+}
 function editChain(id, draft) {
   const c = id ? connById(id) : null;
   const d = draft || { id: id || "", name: c ? c.name : "", enabled: c ? c.enabled : true, hops: c ? hopsOf(c) : [] };
@@ -2135,6 +2298,7 @@ function editChain(id, draft) {
         </div>
         ${iss.all.length ? `<div class="banner warn" style="display:block;margin:6px 0 10px"><ul style="margin:0;padding-left:18px">${iss.all.map(x => `<li>${esc(x)}</li>`).join("")}</ul></div>` : ""}
         ${deviceBanner(chainDeviceLines(d.hops), "margin:6px 0 10px")}
+        ${hopAdvice(d)}
         ${iss.info.map(x => `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${esc(x)}</p>`).join("")}
         <label class="check"><input type="checkbox" class="switch" id="ch-enabled" ${d.enabled ? "checked" : ""}><span>${tr("ui.on")}</span></label>
       </div>
@@ -2146,6 +2310,26 @@ function editChain(id, draft) {
     $$("[data-rm]", m).forEach(b => b.onclick = () => { read(m); d.hops.splice(Number(b.dataset.rm), 1); draw(); });
     $("#ch-add", m).onclick = () => { read(m); const v = $("#ch-pick", m).value; if (connById(v)) { d.hops.push(v); draw(); } };
     $("#ch-new", m).onclick = () => { read(m); S.chainReturn = d; addConn(); };
+    $$("[data-xray]", m).forEach(b => b.onclick = async () => {
+      read(m);
+      const hid = b.dataset.xray;
+      d.xrayBusy = hid;
+      const mm = draw();
+      let r = null;
+      try { r = await act(() => api("POST", "/api/connections/" + hid + "/xray")); } catch (e) { /* act showed it */ }
+      d.xrayBusy = null;
+      if (!mm.isConnected) return; // the editor was closed meanwhile
+      read(mm);
+      if (r && r.missing) d.xrayHelp = hid;
+      else if (r && r.id) {
+        await loadConfig();
+        const i = d.hops.indexOf(hid);
+        if (i > 0) d.hops[i] = r.id;
+        d.xrayHelp = null;
+        toast(tr("ui.chain.xrayDone", r.name));
+      }
+      draw();
+    });
     $("#ch-save", m).onclick = async () => {
       read(m);
       if (!d.name) return toast(tr("ui.enterName"), true);
@@ -2592,7 +2776,7 @@ function copyLogs() { navigator.clipboard.writeText(S.logs.map(e => `${new Date(
 async function renderSettings() {
   const s = S.cfg.settings;
   const chk = (k, title, help) => `<div class="field"><label class="check"><input type="checkbox" class="switch" data-s="${k}" ${s[k] ? "checked" : ""}><span><b style="font-size:13px">${title}</b><br><span style="color:var(--muted);font-size:12.5px">${help}</span></span></label></div>`;
-  $("#view").innerHTML = `<h2>${tr("ui.settings")}</h2><p class="lead">${tr("ui.changesApplyAtOnceWithout")}</p>
+  $("#view").innerHTML = `<h2>${tr("ui.settings")}</h2><p class="lead">${tr("ui.changesApplyAtOnceWithout")}</p><div class="panels">
     <div class="panel"><h3>${tr("ui.settings.language")}</h3>
       <div class="field" style="margin:0"><select id="s-lang" style="max-width:260px"><option value="">${tr("ui.settings.languageAuto")}</option>${I18N.langs.map(l => `<option value="${l.id}" ${l.id === (s.language || "") ? "selected" : ""}>${esc(l.name)}</option>`).join("")}</select>
       <span class="help">${tr("ui.settings.languageHelp")}</span></div></div>
@@ -2609,10 +2793,10 @@ async function renderSettings() {
       ${chk("noTun", tr("ui.noTrafficCaptureLocalProxies"), tr("ui.debugModeProgramsArePointed"))}
       <div class="field"><span>${tr("ui.engineLogDetail")}</span><select id="s-log">${["error", "warning", "info", "debug"].map(v => `<option ${v === s.logLevel ? "selected" : ""}>${v}</option>`).join("")}</select></div>
     </div>
-    <div class="panel"><h3>${tr("ui.profile")}</h3>
-      <p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.allConnectionsRulesAndSettings")}</p>
+    <div class="panel" id="presets-panel"><h3>${tr("ui.presets.title")}</h3>
+      <p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.presets.lead")}</p>
       <div class="field"><label class="check"><input type="checkbox" class="switch" id="ex-secrets"><span><b style="font-size:13px">${tr("ui.includePasswordsAndKeys")}</b><br><span style="color:var(--muted);font-size:12.5px">${tr("ui.fileWillContainThemIn")}</span></span></label></div>
-      <div class="row"><button class="btn" onclick="exportProfile()">${tr("ui.exportProfile")}</button><label class="btn">${tr("ui.importProfile")}<input type="file" accept=".json" hidden onchange="this.files[0] && importFiles([this.files[0]]); this.value=''"></label></div>
+      <div id="presets-list" class="help" style="color:var(--muted)">${tr("ui.checking")}</div>
     </div>
     <div class="panel"><h3>${tr("ui.wslContainer")}</h3><div id="wsl-st" class="help" style="color:var(--muted)">${tr("ui.checking")}</div></div>
     <div class="panel"><h3>${tr("ui.virtualMachinesHyperV")}</h3><div id="hv-st" class="help" style="color:var(--muted)">${tr("ui.checking")}</div></div>
@@ -2623,7 +2807,7 @@ async function renderSettings() {
     <div class="panel"><h3>${tr("ui.legal.title")}</h3>
       <p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.legal.text")}</p>
       <div class="row"><button class="btn" onclick="legalDialog()">${tr("ui.legal.licenses")}</button><span class="help" style="color:var(--muted);font-size:12.5px">${tr("ui.legal.more")}</span></div>
-    </div>`;
+    </div></div>`;
   const save = async () => {
     const ns = { ...S.cfg.settings };
     $$("[data-s]").forEach(el => ns[el.dataset.s] = el.checked);
@@ -2633,6 +2817,7 @@ async function renderSettings() {
     if (relang) location.reload(); // the page comes with the texts of its language
   };
   $$("[data-s], #s-stack, #s-log, #s-lang").forEach(el => el.onchange = save);
+  loadPresets();
   try {
     const w = await api("GET", "/api/wsl");
     $("#wsl-st").innerHTML = !w.wslInstalled ? `${tr("ui.wslIsNotInstalledIt")} <button class="btn small" onclick="installWSL()">${tr("ui.installWsl")}</button><br>${esc(w.detail || "")}`
@@ -2651,49 +2836,178 @@ async function enableHV() {
   const r = await act(() => api("POST", "/api/hyperv/enable"));
   await notice(r.output === "restart" ? tr("ui.hyperVIsOnRestart") : tr("ui.settings.done", r.output), { title: "Hyper-V" });
 }
-// Export goes through the standard Windows "Save as" dialog, not a browser
-// download.
-// The export window: the profile as text to copy, or to save to a file.
-// With passwords and keys the text is a secret, and the window says so.
-async function exportProfile() {
+// ---------- presets ----------
+// A preset is a whole setup: connections, rules, DNS and routing settings
+// (app/presets.go). One runs; the others wait and can be switched to,
+// exported one by one or all together, and imported with a choice for
+// every name that is already taken.
+async function loadPresets() {
+  const el = $("#presets-list");
+  if (!el) return;
+  let list;
+  try { list = await api("GET", "/api/presets"); } catch (e) { el.textContent = e.message; return; }
+  el.style.color = "";
+  el.innerHTML = `<div class="presets">${list.map(p => `<div class="preset-row${p.active ? " on" : ""}">
+      <div class="grow"><b>${esc(p.name)}</b>${p.active ? ` <span class="badge" style="margin-left:6px">${tr("ui.presets.active")}</span>` : ""}
+        <br><span style="color:var(--muted);font-size:12.5px">${tr("ui.presets.counts", p.connections, p.rules)}</span></div>
+      ${p.active ? "" : `<button class="btn small primary" data-pact="${p.id}">${tr("ui.presets.activate")}</button>`}
+      <button class="btn small" data-pren="${p.id}">${tr("ui.presets.rename")}</button>
+      <button class="btn small" data-pexp="${p.id}">${tr("ui.presets.export")}</button>
+      ${p.active ? "" : `<button class="btn small danger" data-pdel="${p.id}">${tr("ui.presets.delete")}</button>`}
+    </div>`).join("")}</div>
+    <div class="row" style="margin-top:10px;flex-wrap:wrap;gap:8px">
+      <button class="btn" id="pr-copy">${tr("ui.presets.newCopy")}</button>
+      <button class="btn" id="pr-empty">${tr("ui.presets.newEmpty")}</button>
+      <button class="btn" id="pr-expall">${tr("ui.presets.exportAll")}</button>
+      <label class="btn">${tr("ui.presets.import")}<input type="file" accept=".json" hidden id="pr-imp"></label>
+    </div>`;
+  const byId = id => list.find(p => p.id === id) || {};
+  const after = async msg => { S.rulesDirty = false; S.rulesDraft = null; await loadConfig(); render(); if (msg) toast(msg); };
+  $$("[data-pact]", el).forEach(b => b.onclick = async () => {
+    const p = byId(b.dataset.pact);
+    if (!await ask(tr("ui.presets.switchAsk", p.name), { title: tr("ui.presets.title"), ok: tr("ui.presets.activate") })) return;
+    await act(() => api("POST", `/api/presets/${p.id}/activate`)); after(tr("ui.presets.switched", p.name));
+  });
+  $$("[data-pren]", el).forEach(b => b.onclick = async () => {
+    const p = byId(b.dataset.pren);
+    const name = await presetNameDialog(tr("ui.presets.rename"), p.name);
+    if (name === null || name === p.name) return;
+    await act(() => api("POST", `/api/presets/${p.id}/rename`, { name })); after(tr("ui.presets.renamed", name));
+  });
+  $$("[data-pdel]", el).forEach(b => b.onclick = async () => {
+    const p = byId(b.dataset.pdel);
+    if (!await ask(tr("ui.presets.deleteAsk", p.name), { title: tr("ui.presets.delete"), ok: tr("ui.presets.delete"), danger: true })) return;
+    await act(() => api("DELETE", `/api/presets/${p.id}`)); after(tr("ui.presets.deleted", p.name));
+  });
+  $$("[data-pexp]", el).forEach(b => b.onclick = () => { const p = byId(b.dataset.pexp); presetExport(p.id, tr("ui.presets.exportOne", p.name), p.active); });
+  const create = async copy => {
+    const name = await presetNameDialog(copy ? tr("ui.presets.newCopy") : tr("ui.presets.newEmpty"), "");
+    if (name === null) return;
+    await act(() => api("POST", "/api/presets", { name, copy })); after(tr("ui.presets.created", name));
+  };
+  $("#pr-copy", el).onclick = () => create(true);
+  $("#pr-empty", el).onclick = () => create(false);
+  $("#pr-expall", el).onclick = () => presetExport("all", tr("ui.presets.exportAll"), true);
+  $("#pr-imp", el).onchange = async e => {
+    const f = e.target.files[0]; e.target.value = "";
+    if (!f) return;
+    const data = await f.text();
+    if (isPresetFile(data) || isProfileFile(data)) return importPresetsFlow(data);
+    importFiles([f]);
+  };
+}
+// presetNameDialog asks for a name; null when cancelled.
+function presetNameDialog(title, value) {
+  return new Promise(resolve => {
+    const m = modal(`<header><h3>${esc(title)}</h3></header>
+      <div class="body"><div class="field" style="margin:0"><span>${tr("ui.presets.name")}</span><input type="text" id="pn-name" value="${esc(value)}" placeholder="${tr("ui.presets.namePlaceholder")}"></div></div>
+      <footer><button class="btn" id="pn-no">${tr("ui.cancel")}</button><button class="btn primary" id="pn-ok">OK</button></footer>`);
+    const done = v => { closeModal(); resolve(v); };
+    const ok = () => { const v = $("#pn-name", m).value.trim(); if (!v) return toast(tr("ui.presets.nameEmpty"), true); done(v); };
+    $("#pn-ok", m).onclick = ok;
+    $("#pn-no", m).onclick = () => done(null);
+    $("#pn-name", m).onkeydown = e => { if (e.key === "Enter") ok(); if (e.key === "Escape") done(null); };
+    setTimeout(() => { const i = $("#pn-name", m); i.focus(); i.select(); }, 50);
+  });
+}
+// presetExport: one preset (id) or all ("all") as text to copy or a file.
+// The running preset's connections are known here: their device limits on
+// another computer are shown, as for any export.
+async function presetExport(id, title, running) {
   let secrets = !!($("#ex-secrets") && $("#ex-secrets").checked), seq = 0;
-  const m = modal(`<header><h3>${tr("ui.exportProfile")}</h3><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
+  const m = modal(`<header><h3>${esc(title)}</h3><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
     <div class="body">
-      <p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.export.intro")}</p>
-      <div class="field"><label class="check"><input type="checkbox" class="switch" id="exm-secrets" ${secrets ? "checked" : ""}><span><b style="font-size:13px">${tr("ui.includePasswordsAndKeys")}</b></span></label></div>
-      <div id="exm-warn"></div>
-      <textarea id="exm-text" class="export-text" readonly spellcheck="false" aria-label="${tr("ui.exportProfile")}"></textarea>
+      <p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.presets.exportLead")}</p>
+      <div class="field"><label class="check"><input type="checkbox" class="switch" id="pe-secrets" ${secrets ? "checked" : ""}><span><b style="font-size:13px">${tr("ui.includePasswordsAndKeys")}</b></span></label></div>
+      <div id="pe-warn"></div>
+      <textarea id="pe-text" class="export-text" readonly spellcheck="false" aria-label="${esc(title)}"></textarea>
     </div>
-    <footer><button class="btn" onclick="closeModal()">${tr("ui.close")}</button><button class="btn" id="exm-save">${tr("ui.export.saveFile")}</button><button class="btn primary" id="exm-copy">${tr("ui.copy")}</button></footer>`, { wide: true });
-  const text = $("#exm-text", m), copy = $("#exm-copy", m), save = $("#exm-save", m);
-  // what the profile takes in device limits once it is used on another computer
-  const awayLines = deviceLines(connDevices(S.cfg.connections || []), DEVICE_AWAY);
+    <footer><button class="btn" onclick="closeModal()">${tr("ui.close")}</button><button class="btn" id="pe-save">${tr("ui.export.saveFile")}</button><button class="btn primary" id="pe-copy">${tr("ui.copy")}</button></footer>`, { wide: true });
+  const text = $("#pe-text", m), copy = $("#pe-copy", m), save = $("#pe-save", m);
+  const awayLines = running ? deviceLines(connDevices(S.cfg.connections || []), DEVICE_AWAY) : [];
   const load = async () => {
     const my = ++seq;
-    $("#exm-warn", m).innerHTML = (secrets
-      ? `<div class="banner bad" style="margin:0 0 10px">${tr("ui.export.secretsWarning")}</div>`
+    $("#pe-warn", m).innerHTML = (secrets ? `<div class="banner bad" style="margin:0 0 10px">${tr("ui.export.secretsWarning")}</div>`
       : `<p class="help" style="color:var(--muted);font-size:12.5px;margin:0 0 10px">${tr("ui.export.noSecrets")}</p>`)
       + deviceBanner(awayLines, "margin:0 0 10px");
     text.value = ""; copy.disabled = save.disabled = true;
     try {
-      const r = await api("POST", "/api/export", { secrets });
-      if (my !== seq) return; // the switch was flipped again meanwhile
+      const r = await api("POST", `/api/presets/${id}/export`, { secrets });
+      if (my !== seq) return;
       text.value = r.text; copy.disabled = save.disabled = false;
     } catch (e) { if (my === seq) toast(e.message, true); }
   };
-  $("#exm-secrets", m).onchange = e => {
-    secrets = e.target.checked;
-    const s = $("#ex-secrets"); if (s) s.checked = secrets;
-    load();
-  };
+  $("#pe-secrets", m).onchange = e => { secrets = e.target.checked; const s = $("#ex-secrets"); if (s) s.checked = secrets; load(); };
   text.onfocus = () => text.select();
-  copy.onclick = () => navigator.clipboard.writeText(text.value)
-    .then(() => { toast(tr(secrets ? "ui.export.copiedSecrets" : "ui.copied")); deviceNotice(awayLines); }, e => toast(e.message, true));
+  copy.onclick = () => navigator.clipboard.writeText(text.value).then(() => { toast(tr(secrets ? "ui.export.copiedSecrets" : "ui.copied")); deviceNotice(awayLines); }, e => toast(e.message, true));
   save.onclick = async () => {
-    const r = await act(() => api("POST", "/api/export/save", { secrets })).catch(() => null);
+    const r = await act(() => api("POST", `/api/presets/${id}/export`, { secrets, save: true })).catch(() => null);
     if (r && r.path) { toast(tr("ui.settings.profileSaved", r.path)); deviceNotice(awayLines); }
   };
   load();
+}
+// isProfileFile: any VPNer profile, also one exported before presets existed.
+function isProfileFile(data) {
+  try { const o = JSON.parse(data); return !!o && o.vpner !== undefined; } catch (e) { return false; }
+}
+// isPresetFile: a file exported from the presets (one with a name, or all).
+function isPresetFile(data) {
+  try { const o = JSON.parse(data); return !!o && o.vpner !== undefined && (!!o.name || Array.isArray(o.presets)); } catch (e) { return false; }
+}
+// importPresetsFlow: every preset of the file; for a name that is taken the
+// user picks replace / rename the existing one / rename the new one / skip,
+// for each such preset or once for all of them.
+async function importPresetsFlow(data) {
+  const prev = await act(() => api("POST", "/api/presets/import", { data, dry: true }));
+  const items = prev.items || [];
+  const conflicts = items.map((it, i) => it.conflict ? i : -1).filter(i => i >= 0);
+  const dec = items.map(it => ({ action: it.conflict ? "renameNew" : "add", name: it.suggest || it.name, oldName: it.suggest || it.name, skip: false }));
+  let all = false;
+  const ACTS = [["replace", "ui.presets.actReplace"], ["renameOld", "ui.presets.actRenameOld"], ["renameNew", "ui.presets.actRenameNew"], ["skip", "ui.presets.actSkip"]];
+  const m = modal(`<header><h3>${tr("ui.presets.importTitle")}</h3><button class="icon-btn" onclick="closeModal()" aria-label="${tr("ui.close")}">${ICON.close}</button></header>
+    <div class="body"><p class="help" style="color:var(--muted);font-size:12.5px;margin-top:0">${tr("ui.presets.importLead", items.length)}</p>
+      <div id="pi-rows"></div>
+      ${conflicts.length > 1 ? `<div class="field" style="margin-top:8px"><label class="check"><input type="checkbox" class="switch" id="pi-all"><span><b style="font-size:13px">${tr("ui.presets.applyAll")}</b><br><span style="color:var(--muted);font-size:12.5px">${tr("ui.presets.applyAllHelp")}</span></span></label></div>` : ""}
+      ${(prev.notes || []).length ? `<div class="banner warn" style="margin:6px 0 0;display:block"><b>${tr("ui.pleaseNote")}</b><ul style="margin:6px 0 0;padding-left:18px">${prev.notes.map(n => `<li>${esc(n)}</li>`).join("")}</ul></div>` : ""}
+    </div>
+    <footer><button class="btn" onclick="closeModal()">${tr("ui.cancel")}</button><button class="btn primary" id="pi-go">${tr("ui.import")}</button></footer>`, { sticky: true, wide: true });
+  const rowsEl = $("#pi-rows", m);
+  const draw = () => {
+    rowsEl.innerHTML = items.map((it, i) => {
+      const d = dec[i], follows = all && it.conflict && i !== conflicts[0];
+      const head = `<b>${esc(it.name)}</b> <span style="color:var(--muted);font-size:12.5px">${tr("ui.presets.counts", it.connections, it.rules)}</span>`;
+      if (!it.conflict) return `<div class="preset-row" style="margin-bottom:6px"><div class="grow">${head}<br><span style="font-size:12.5px;color:var(--ok)">${tr("ui.presets.willAdd")}</span></div>
+        <label class="check" style="margin:0"><input type="checkbox" data-pskip="${i}" ${d.skip ? "" : "checked"}><span>${tr("ui.presets.importIt")}</span></label></div>`;
+      const choice = follows ? dec[conflicts[0]].action : d.action;
+      return `<div class="preset-row conflict" style="display:block">
+        <div>${head}</div>
+        <div style="font-size:12.5px;color:var(--warn);margin:4px 0 6px">${esc(tr("ui.presets.conflictExists", it.name))}${it.activeConflict ? " " + esc(tr("ui.presets.conflictActive")) : ""}</div>
+        <div class="row" style="flex-wrap:wrap;gap:6px 14px">${ACTS.map(([v, k]) => `<label class="check" style="margin:0"><input type="radio" name="pa-${i}" value="${v}" data-pa="${i}" ${choice === v ? "checked" : ""} ${follows ? "disabled" : ""}><span>${tr(k)}</span></label>`).join("")}</div>
+        ${choice === "renameNew" && !follows ? `<div class="field" style="margin:6px 0 0"><span>${tr("ui.presets.newNameLabel")}</span><input type="text" data-pn="${i}" value="${esc(d.name)}"></div>` : ""}
+        ${choice === "renameOld" && !follows ? `<div class="field" style="margin:6px 0 0"><span>${esc(tr("ui.presets.oldNameLabel", it.name))}</span><input type="text" data-po="${i}" value="${esc(d.oldName)}"></div>` : ""}
+        ${follows ? `<div style="font-size:12.5px;color:var(--muted);margin-top:4px">${tr("ui.presets.sameAsFirst")}</div>` : ""}
+      </div>`;
+    }).join("");
+    $$("[data-pa]", rowsEl).forEach(r => r.onchange = () => { dec[+r.dataset.pa].action = r.value; draw(); });
+    $$("[data-pn]", rowsEl).forEach(x => x.oninput = () => dec[+x.dataset.pn].name = x.value);
+    $$("[data-po]", rowsEl).forEach(x => x.oninput = () => dec[+x.dataset.po].oldName = x.value);
+    $$("[data-pskip]", rowsEl).forEach(x => x.onchange = () => dec[+x.dataset.pskip].skip = !x.checked);
+  };
+  draw();
+  if ($("#pi-all", m)) $("#pi-all", m).onchange = e => { all = e.target.checked; draw(); };
+  $("#pi-go", m).onclick = async () => {
+    const decisions = items.map((it, i) => {
+      if (!it.conflict) return { index: i, action: dec[i].skip ? "skip" : "add" };
+      const follows = all && i !== conflicts[0];
+      // the same choice for all: every renamed preset still gets a free name of its own
+      return { index: i, action: follows ? dec[conflicts[0]].action : dec[i].action,
+        name: follows ? it.suggest : dec[i].name, oldName: follows ? it.suggest : dec[i].oldName };
+    });
+    const replacesActive = decisions.some((d, i) => d.action === "replace" && items[i].activeConflict);
+    if (replacesActive && !await ask(tr("ui.presets.replaceActiveAsk"), { title: tr("ui.presets.importTitle"), ok: tr("ui.import"), danger: true })) return;
+    const r = await act(() => api("POST", "/api/presets/import", { data, decisions }));
+    closeModal(); S.rulesDirty = false; S.rulesDraft = null; await loadConfig(); render(); toast(tr("ui.presets.imported", r.added));
+  };
 }
 async function installWSL() {
   const r = await act(() => api("POST", "/api/wsl/install"));

@@ -21,6 +21,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"time"
+	"unicode"
 
 	"vpner/internal/app"
 	"vpner/internal/config"
@@ -124,6 +125,8 @@ func readJSON(r *http.Request, v any) error {
 type connDTO struct {
 	config.Connection
 	SecretSet map[string]bool `json:"secretSet"`
+	// what the chain editor needs to warn about this connection as a hop
+	Net *providers.NetInfo `json:"net,omitempty"`
 }
 
 // page is the UI with the saved theme already in it, so the window opens
@@ -187,7 +190,7 @@ func (s *Server) routes(mux *http.ServeMux) {
 			DataDir     string          `json:"dataDir"`
 		}{Rules: cfg.Rules, Settings: cfg.Settings, DNS: cfg.DNS, Appearance: cfg.Appearance, DataDir: s.App.DataDir}
 		for _, c := range cfg.Connections {
-			d := connDTO{Connection: c, SecretSet: map[string]bool{}}
+			d := connDTO{Connection: c, SecretSet: map[string]bool{}, Net: providers.HopNet(&c)}
 			for k, v := range c.Secrets {
 				d.SecretSet[k] = v != ""
 			}
@@ -256,6 +259,16 @@ func (s *Server) routes(mux *http.ServeMux) {
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Set up the XRay way to an Amnezia server for chains: SSH to the server,
+	// maybe restart its XRay. Takes 5–20 s; the window shows progress.
+	mux.HandleFunc("POST /api/connections/{id}/xray", func(w http.ResponseWriter, r *http.Request) {
+		res, err := s.App.ChainXRay(r.PathValue("id"))
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, res)
 	})
 	mux.HandleFunc("GET /api/hyperv", func(w http.ResponseWriter, r *http.Request) {
 		msg := app.HyperVStatus()
@@ -352,6 +365,125 @@ func (s *Server) routes(mux *http.ServeMux) {
 		}
 		writeJSON(w, map[string]any{"path": path})
 	})
+	// Presets: whole setups under names (app/presets.go).
+	mux.HandleFunc("GET /api/presets", func(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.App.Presets()) })
+	mux.HandleFunc("POST /api/presets", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Name string `json:"name"`
+			Copy bool   `json:"copy"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		id, err := s.App.NewPreset(req.Name, req.Copy)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]string{"id": id})
+	})
+	mux.HandleFunc("POST /api/presets/{id}/activate", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.App.SwitchPreset(r.PathValue("id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("POST /api/presets/{id}/rename", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Name string `json:"name"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if err := s.App.RenamePreset(r.PathValue("id"), req.Name); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	mux.HandleFunc("DELETE /api/presets/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if err := s.App.DeletePreset(r.PathValue("id")); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	})
+	// Export of one preset (id) or of all ("all"): as text, or saved to a
+	// file from the Windows "Save as" dialog (save=true).
+	mux.HandleFunc("POST /api/presets/{id}/export", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Secrets bool `json:"secrets"`
+			Save    bool `json:"save"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		id := r.PathValue("id")
+		if id == "all" {
+			id = ""
+		}
+		data, name, err := s.App.ExportPreset(id, req.Secrets)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		w.Header().Set("Cache-Control", "no-store")
+		if !req.Save {
+			writeJSON(w, map[string]any{"text": string(data)})
+			return
+		}
+		file := "vpner-presets-" + time.Now().Format("2006-01-02") + ".json"
+		if name != "" {
+			file = "vpner-preset-" + safeFileName(name) + ".json"
+		}
+		path, ok, err := winutil.SaveFileDialog(i18n.T("web.savePresets"), file, i18n.T("web.vpnerPresets"), "json")
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		if !ok {
+			writeJSON(w, map[string]any{"canceled": true})
+			return
+		}
+		if err := os.WriteFile(path, data, 0o600); err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]any{"path": path})
+	})
+	// Import of a preset file: dry=true lists its presets and taken names,
+	// otherwise the decisions are applied.
+	mux.HandleFunc("POST /api/presets/import", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Data      string               `json:"data"`
+			Dry       bool                 `json:"dry"`
+			Decisions []app.PresetDecision `json:"decisions"`
+		}
+		if err := readJSON(r, &req); err != nil {
+			writeErr(w, err)
+			return
+		}
+		if req.Dry {
+			prev, err := s.App.PreviewPresets(req.Data)
+			if err != nil {
+				writeErr(w, err)
+				return
+			}
+			writeJSON(w, prev)
+			return
+		}
+		n, err := s.App.ImportPresets(req.Data, req.Decisions)
+		if err != nil {
+			writeErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]int{"added": n})
+	})
+
 	// The clipboard for the window's own "Вставить" menu item (the browser
 	// would ask for a permission).
 	mux.HandleFunc("GET /api/clipboard", func(w http.ResponseWriter, r *http.Request) {
@@ -563,4 +695,21 @@ func (s *Server) routes(mux *http.ServeMux) {
 			}
 		}
 	})
+}
+
+// safeFileName keeps letters, digits and a few signs of a name for a file.
+func safeFileName(name string) string {
+	var b strings.Builder
+	for _, r := range strings.TrimSpace(name) {
+		switch {
+		case unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_':
+			b.WriteRune(r)
+		case r == ' ' || r == '.':
+			b.WriteRune('-')
+		}
+	}
+	if b.Len() == 0 {
+		return "preset"
+	}
+	return b.String()
 }

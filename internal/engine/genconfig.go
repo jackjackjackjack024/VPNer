@@ -84,7 +84,7 @@ func Outbounds(conf map[string]any) map[string]bool {
 	known := map[string]bool{}
 	ps, _ := conf["proxies"].([]map[string]any)
 	for _, p := range ps {
-		if n, ok := p["name"].(string); ok {
+		if n, ok := p["name"].(string); ok && !isRealityTwin(n) {
 			known[n] = true
 		}
 	}
@@ -139,6 +139,9 @@ func Generate(in GenInput) (map[string]any, error) {
 		}
 		out["name"] = c.ID
 		proxies = append(proxies, out)
+		if twin := applyRealityHello(out, c); twin != nil {
+			proxies = append(proxies, twin)
+		}
 		known[c.ID] = true
 		serverHosts = append(serverHosts, providers.ServerHosts(c)...)
 	}
@@ -149,7 +152,7 @@ func Generate(in GenInput) (map[string]any, error) {
 		if !known[ch.First] {
 			continue
 		}
-		var add []map[string]any
+		var add, twins []map[string]any
 		for _, st := range ch.Steps {
 			var out map[string]any
 			if st.Tunnel {
@@ -165,11 +168,20 @@ func Generate(in GenInput) (map[string]any, error) {
 			}
 			out["name"] = st.Name
 			add = append(add, out)
+			if !st.Tunnel {
+				// Only the last hop is probed (it carries the chain's name),
+				// so only it gets a twin; the hops before it use the hello
+				// their own connections remembered.
+				if twin := applyRealityHello(out, cfg.Conn(st.ConnID)); twin != nil && st.Name == ch.ID {
+					twins = append(twins, twin)
+				}
+			}
 		}
 		if len(add) != len(ch.Steps) {
 			continue
 		}
 		proxies = append(proxies, add...)
+		proxies = append(proxies, twins...)
 		for _, st := range ch.Steps {
 			known[st.Name] = true
 		}
@@ -201,7 +213,7 @@ func Generate(in GenInput) (map[string]any, error) {
 	}
 	rules = append(rules, "MATCH,"+target(s.FinalTarget))
 
-	dnsSection := buildDNS(cfg.DNS)
+	dnsSection := buildDNS(cfg.DNS, known)
 	fakeFilter := append([]string{}, defaultFakeIPFilter...)
 	for _, h := range uniq(serverHosts) {
 		if net.ParseIP(h) == nil && h != "" {
@@ -525,11 +537,19 @@ func dnsAddr(sv config.DNSServer) string {
 	return sv.Address + "#" + strings.Join(params, "&")
 }
 
-func buildDNS(d config.DNS) map[string]any {
+// buildDNS renders the DNS section. known holds the outbounds of this
+// config: a server reached through a connection that is not running (a VM
+// still starting, a VPN that is off) is left out, because mihomo would take
+// "#<id>" of a missing outbound for a network interface and fail every query
+// ("interface not found") — leaving the computer without DNS. Its queries go
+// to the other default servers meanwhile, or to the system resolver, until
+// the connection is up and the config is applied again.
+func buildDNS(d config.DNS, known map[string]bool) map[string]any {
+	usable := func(sv *config.DNSServer) bool { return sv != nil && (sv.Via == "" || known[sv.Via]) }
 	addrs := func(ids []string) []string {
 		var out []string
 		for _, id := range ids {
-			if sv := d.Server(id); sv != nil {
+			if sv := d.Server(id); usable(sv) {
 				out = append(out, dnsAddr(*sv))
 			}
 		}
@@ -556,8 +576,8 @@ func buildDNS(d config.DNS) map[string]any {
 			continue
 		}
 		sv := d.Server(r.Server)
-		if sv == nil {
-			continue
+		if !usable(sv) {
+			continue // its names go to the default servers meanwhile
 		}
 		for _, v := range r.Values {
 			v = strings.ToLower(strings.TrimSpace(v))

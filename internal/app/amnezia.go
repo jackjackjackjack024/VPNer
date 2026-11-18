@@ -81,7 +81,7 @@ func (a *App) provisionChainKeys(c *config.Connection, cfg *config.Config) error
 		if !ok || want[hop] {
 			continue
 		}
-		if hc := cfg.Conn(hop); hc != nil {
+		if hc := cfg.Conn(hop); hc != nil && !chainClientShared(cfg, c.ID, k, id) {
 			go a.removeChainClient(*hc, id)
 		}
 		delete(c.Secrets, k)
@@ -139,4 +139,17 @@ func (a *App) removeChainClient(hop config.Connection, clientID string) {
 		return
 	}
 	a.Log.Infof("app", i18n.T("app.chainOwnUserRemoved"), hop.Name)
+}
+
+// chainClientShared: a waiting preset has the same chain with the same
+// server user, so that user must stay on the server.
+func chainClientShared(cfg *config.Config, chainID, key, value string) bool {
+	for _, p := range cfg.Presets {
+		for _, c := range p.Connections {
+			if c.ID == chainID && c.Secrets[key] == value {
+				return true
+			}
+		}
+	}
+	return false
 }
