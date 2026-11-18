@@ -6,6 +6,8 @@ All notable changes are listed here. The format follows [Keep a Changelog](https
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-18
+
 ### Added
 
 - The log of INCY inside a virtual machine shows up in VPNer's log, under that connection, so everything is in one place. For VMs created with this version.
